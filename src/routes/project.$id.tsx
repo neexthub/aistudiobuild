@@ -7,7 +7,7 @@ import { RichText } from '@/components/CodeBlock';
 import { SourceEditor } from '@/components/studio/SourceEditor';
 import { PromptSuggestions } from '@/components/studio/PromptSuggestions';
 import { getProject, updateProject, saveProjectFiles, editProjectFiles, restoreRevision, type Project, type ChatMsg } from '@/lib/store';
-import { extractHtml, MODELS, streamChat, SYSTEM_PROMPT, uploadImage, generateImage } from '@/lib/ai';
+import { extractHtml, MODELS, streamChat, SYSTEM_PROMPT, uploadImage, generateImage, withFallback } from '@/lib/ai';
 import { bundleHtml } from '@/lib/project/bundle';
 import { ProviderSettings } from '@/components/studio/ProviderSettings';
 import { publishApp } from '@/lib/publish.functions';
@@ -20,6 +20,7 @@ import { downloadSource } from '@/lib/project/export';
 import { TOOL_SERVICES } from '@/lib/services';
 import { runScript, SHELL_AGENT_PROMPT } from '@/lib/project/shell';
 import { testFiles } from '@/lib/project/bundle';
+import { WorkSteps, runSteps, commandStep, type Step } from '@/components/studio/WorkSteps';
 type Attach = { images: string[]; texts: { name: string; content: string }[] };
 const TEXT_EXT = /\.(txt|md|json|csv|html?|css|js|jsx|ts|tsx|xml|ya?ml|svg)$/i;
 type TermLine = { who: 'user' | 'agent'; cmd: string; output: string; error?: boolean };
@@ -42,6 +43,10 @@ function Builder() {
   const [term, setTerm] = useState<TermLine[]>([]), [cmd, setCmd] = useState('');
   const [attach, setAttach] = useState<Attach>({ images: [], texts: [] }), [uploading, setUploading] = useState(false), [imaging, setImaging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [cmdSteps, setCmdSteps] = useState<Step[]>([]), [runView, setRunView] = useState<Step[]>([]);
+  const stepsRef = useRef<Step[]>([]);
+  const pushStep = (st: Step) => setCmdSteps(x => { const n = [...x, st]; stepsRef.current = [...runViewRef.current, ...n]; return n; });
+  const runViewRef = useRef<Step[]>([]);
   const ctrl = useRef<AbortController | null>(null), latest = useRef<Project | null>(null), bottom = useRef<HTMLDivElement>(null);
   const assign = (p: Project) => { latest.current = p; setProject(p); };
   useEffect(() => {
@@ -78,7 +83,7 @@ function Builder() {
     } catch (e) { setError((e as Error).message); }
   };
   const persistRun = (run: RunRecord) => {
-    setLiveRun(run);
+    setLiveRun(run); const rs = runSteps(run); runViewRef.current = rs; setRunView(rs);
     const p = getProject(id); if (!p) return;
     const runs = [...(p.runs ?? []).filter(r => r.id !== run.id), run].slice(-10);
     const updated = updateProject(id, { runs }); if (updated) assign(updated);
@@ -86,6 +91,7 @@ function Builder() {
   const execScript = (script: string, who: 'user' | 'agent') => {
     const cur = getProject(id)?.files ?? {}; const { files: next, log } = runScript(cur, script);
     setTerm(t => [...t, ...log.map(l => ({ who, ...l }))].slice(-300));
+    if (who === 'agent') log.forEach(l => pushStep(commandStep(l.cmd, l.output, l.error)));
     if (next !== cur && JSON.stringify(next) !== JSON.stringify(cur)) { const p = saveProjectFiles(id, next, who === 'agent' ? 'কমান্ড এজেন্ট' : 'টার্মিনাল', 'html'); assign(p); setSelected(s => next[s] !== undefined ? s : ''); setDraft(d => next[selected] ?? d); }
     return log;
   };
@@ -125,7 +131,7 @@ function Builder() {
     const fileNotes = att.texts.map(t => `--- সংযুক্ত ফাইল: ${t.name}\n${t.content}`).join('\n');
     const fullGoal = goal + (fileNotes ? '\n\n' + fileNotes : '');
     const assets = latest.current?.assets ?? [];
-    setBusy(true); setError(''); setStreaming('');
+    setBusy(true); setError(''); setStreaming(''); setCmdSteps([]); setRunView([]); runViewRef.current = []; stepsRef.current = [];
     const abort = new AbortController(); ctrl.current = abort;
     try {
       const userMsg: ChatMsg = { role: 'user', content: goal + (att.texts.length ? `\n📎 ${att.texts.map(t => t.name).join(', ')}` : ''), ...(imgs.length ? { images: imgs } : {}) };
@@ -136,15 +142,16 @@ function Builder() {
         setView('terminal'); setPanel('workspace');
         const list = Object.entries(files).map(([p, c]) => `--- ${p}\n${c.slice(0, 2500)}`).join('\n').slice(0, 9000);
         let full = '';
-        const reply = await streamChat({ role: 'coder', system: SHELL_AGENT_PROMPT, messages: [{ role: 'user', content: `অনুরোধ: ${fullGoal}\n${memory ? 'চ্যাট মেমরি:\n' + memory + '\n' : ''}${[...imgs, ...assets].length ? 'imageLinks:\n' + [...imgs, ...assets].join('\n') + '\n' : ''}বর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }], images: imgs, signal: abort.signal, onProvider: label => setTerm(t => [...t, { who: 'agent', cmd: 'model', output: label }]), onToken: t => { full += t; setStreaming(full); } });
+        const reply = await withFallback(async attempt => { full = ''; const r = await streamChat({ attempt, role: 'coder', system: SHELL_AGENT_PROMPT, messages: [{ role: 'user', content: `অনুরোধ: ${fullGoal}\n${memory ? 'চ্যাট মেমরি:\n' + memory + '\n' : ''}${[...imgs, ...assets].length ? 'imageLinks:\n' + [...imgs, ...assets].join('\n') + '\n' : ''}বর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }], images: imgs, signal: abort.signal, onProvider: label => { setTerm(t => [...t, { who: 'agent', cmd: 'model', output: label }]); pushStep(commandStep('model', label)); }, onToken: t => { full += t; setStreaming(full); } }); if (!/```(?:sh|bash|shell)?\n[\s\S]*?```/.test(r)) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।'); return r; }, abort.signal, 3, n => pushStep({ id: crypto.randomUUID(), kind: 'error', title: `উত্তরে কমান্ড ছিল না — অন্য মডেলে আবার চেষ্টা #${n}` }));
         const script = [...reply.matchAll(/```(?:sh|bash|shell)?\n([\s\S]*?)```/g)].map(m => m[1]).join('\n');
         if (!script.trim()) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।');
         const log = execScript(script, 'agent'), failed = log.find(l => l.error);
         const after = getProject(id)?.files ?? {}, issues = testFiles(after);
+        pushStep(commandStep('test', issues.length ? '✗ ' + issues.join('\n✗ ') : '✓ সব স্ট্যাটিক টেস্ট পাস', issues.length > 0)); pushStep(commandStep('build', bundleHtml(after) ? '✓ বিল্ড সফল' : '✗ বিল্ড হয়নি', !bundleHtml(after)));
         setTerm(t => [...t, { who: 'agent', cmd: 'test', output: issues.length ? '✗ ' + issues.join('\n✗ ') : '✓ সব স্ট্যাটিক টেস্ট পাস' }, { who: 'agent', cmd: 'build', output: bundleHtml(after) ? '✓ বিল্ড সফল — প্রিভিউ আপডেট' : '✗ বিল্ড হয়নি', error: !bundleHtml(after) }]);
         const note = (reply.split('```')[0] ?? '').trim() || 'কমান্ড চালানো হয়েছে।';
         const mini = log.slice(0, 12).map(l => `$ ${l.cmd}\n  ${l.output.split('\n')[0]?.slice(0, 120)}`).join('\n');
-        const updated = updateProject(id, { messages: [...(getProject(id)?.messages ?? []), { role: 'assistant', content: `${note}\n\n\`\`\`sh\n${mini}\n\`\`\`\n${log.length}টি কমান্ড চলেছে${failed ? ` — ত্রুটি: ${failed.output}` : ' ✓'}${issues.length ? ` · ${issues.length}টি টেস্ট সমস্যা` : ' · টেস্ট ও বিল্ড পাস'}।`, model: 'কমান্ড এজেন্ট' }] }); if (updated) assign(updated);
+        const updated = updateProject(id, { messages: [...(getProject(id)?.messages ?? []), { role: 'assistant', content: `${note}\n\n\`\`\`sh\n${mini}\n\`\`\`\n${log.length}টি কমান্ড চলেছে${failed ? ` — ত্রুটি: ${failed.output}` : ' ✓'}${issues.length ? ` · ${issues.length}টি টেস্ট সমস্যা` : ' · টেস্ট ও বিল্ড পাস'}।`, model: 'কমান্ড এজেন্ট', steps: stepsRef.current }] }); if (updated) assign(updated);
         setView('preview'); void suggestNext(goal);
       } else if (mode === 'agents') {
         setView('terminal'); setPanel('workspace');
@@ -152,7 +159,7 @@ function Builder() {
         const { files: generated } = await buildWithAgents(fullGoal, base, abort.signal, persistRun, value => setStreaming(value), { images: imgs, memory, assets });
         const result = saveProjectFiles(id, generated, 'এজেন্ট আপডেট', 'html');
         setTerm(t => [...t, ...fileChanges(base, generated).map(c => ({ who: 'agent' as const, cmd: `${c.kind === 'deleted' ? 'rm' : 'write'} ${c.path}`, output: c.kind === 'added' ? '+ নতুন ফাইল' : c.kind === 'deleted' ? '− মুছে ফেলা' : '~ পরিবর্তিত' })), { who: 'agent', cmd: 'build', output: '✓ বিল্ড ও টেস্ট শেষ' }]);
-        const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: `কাজ শেষ! ${Object.keys(generated).length}টি ফাইল তৈরি, মান যাচাই ও টেস্ট হয়েছে। প্রিভিউ দেখুন, তারপর পাবলিশ করুন।`, model: MODELS.fast }] }); if (updated) assign(updated);
+        const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: `কাজ শেষ! ${Object.keys(generated).length}টি ফাইল তৈরি, মান যাচাই ও টেস্ট হয়েছে। প্রিভিউ দেখুন, তারপর পাবলিশ করুন।`, model: MODELS.fast, steps: [...runViewRef.current, ...fileChanges(base, generated).map(c => commandStep(c.kind === 'deleted' ? 'rm ' + c.path : 'write ' + c.path, c.kind))] }] }); if (updated) assign(updated);
         setSelected('index.html'); setDraft(generated['index.html'] ?? ''); setTabs(['index.html']); setView('preview'); void suggestNext(goal);
       } else {
         let full = '';
@@ -192,7 +199,7 @@ function Builder() {
         <div className="flex h-11 shrink-0 items-center gap-2 border-b px-4 text-xs"><Bot className="h-4 w-4 text-primary" /><span className="font-semibold">NextBuild Agent</span><span className="ml-auto text-muted-foreground">অটো মাল্টি-মডেল</span></div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {!project.messages.length && <div className="py-8"><Sparkles className="mb-4 h-7 w-7 text-primary" /><h1 className="mb-2 text-xl font-semibold">কী তৈরি করতে চান?</h1><p className="text-sm text-muted-foreground">আপনার অ্যাপের অনুরোধ লিখুন।</p><div className="mt-5 flex flex-col items-start gap-2">{['একটি inventory app বানাও', 'বাংলা portfolio website বানাও', 'একটি task manager বানাও'].map(text => <Button key={text} variant="outline" size="sm" onClick={() => setInput(text)}>{text}</Button>)}</div></div>}
-          {project.messages.map((m, i) => <div key={i} className={m.role === 'user' ? 'ml-5 rounded-md bg-secondary px-3 py-2 text-sm whitespace-pre-wrap break-words' : 'min-w-0 space-y-1'}>{m.role === 'assistant' && <p className="text-[10px] text-primary">NextBuild · {m.model ?? 'Agent'}</p>}{m.role === 'user' ? m.content : <RichText text={m.content} />}{m.images?.length ? <div className="mt-2 flex flex-wrap gap-2">{m.images.map(u => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="সংযুক্ত ছবি" className="h-24 w-24 rounded-md border object-cover" /></a>)}</div> : null}</div>)}
+          {project.messages.map((m, i) => <div key={i} className={m.role === 'user' ? 'ml-5 rounded-md bg-secondary px-3 py-2 text-sm whitespace-pre-wrap break-words' : 'min-w-0 space-y-1'}>{m.role === 'assistant' && <p className="text-[10px] text-primary">NextBuild · {m.model ?? 'Agent'}</p>}{m.role === 'assistant' && m.steps?.length ? <WorkSteps steps={m.steps} open={false} /> : null}{m.role === 'user' ? m.content : <RichText text={m.content} />}{m.images?.length ? <div className="mt-2 flex flex-wrap gap-2">{m.images.map(u => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="সংযুক্ত ছবি" className="h-24 w-24 rounded-md border object-cover" /></a>)}</div> : null}</div>)}
           {!busy && !!project.suggestions?.length && <div className="space-y-1"><p className="flex items-center gap-1 text-[10px] text-muted-foreground"><Lightbulb className="h-3 w-3" />পরের ধাপের সাজেশন</p><div className="flex flex-wrap gap-1">{project.suggestions.map(sg => <Button key={sg} variant="outline" size="sm" className="h-auto whitespace-normal py-1 text-left text-xs" onClick={() => setInput(sg)}>{sg}</Button>)}</div></div>}
           {liveRun && <div className="space-y-2 border-l-2 border-primary pl-3"><p className="text-xs font-semibold">{liveRun.summary}</p>{liveRun.tasks.map(task => <div key={task.id} className="flex items-start gap-2 text-xs">{task.state === 'running' ? <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin text-primary" /> : task.state === 'completed' ? <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" /> : <Clock className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />}<span className="min-w-0 flex-1 break-words">{task.role}</span><span className="text-muted-foreground">{taskNames[task.state]}</span></div>)}</div>}
           {busy && <p className="flex items-center gap-2 text-xs text-primary"><Loader2 className="h-3 w-3 animate-spin" />{liveRun?.state === 'planning' ? 'পরিকল্পনা তৈরি হচ্ছে…' : 'এজেন্ট কাজ করছে…'}</p>}
