@@ -27,7 +27,7 @@ function runtime(pages: string[], store: Record<string, string>, embedded: strin
 try{window.localStorage.getItem('x')}catch(e){var mk=function(){return{getItem:function(k){return Object.prototype.hasOwnProperty.call(S,k)?S[k]:null},setItem:function(k,v){S[k]=String(v)},removeItem:function(k){delete S[k]},clear:function(){for(var k in S)delete S[k]},key:function(i){return Object.keys(S)[i]||null},get length(){return Object.keys(S).length}}};Object.defineProperty(window,'localStorage',{value:mk(),configurable:true});Object.defineProperty(window,'sessionStorage',{value:mk(),configurable:true});}
 var P=${JSON.stringify(pages)};${embedded}
 function go(h){var k=h.replace(/^\\.?\\//,'').split(/[?#]/)[0]||'index.html';if(P.indexOf(k)<0)return false;
-if(window.parent!==window){window.parent.postMessage({nbNav:k,store:S},'*');return true;}
+if(window.parent!==window){window.parent.postMessage({nbNav:k,store:S,pages:window.__nbPages||null},'*');return true;}
 if(window.__nbPages){location.href=URL.createObjectURL(new Blob([window.__nbPages[k]],{type:'text/html'}));return true;}return false;}
 window.__nbGo=go;document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');if(!a)return;var href=a.getAttribute('href');if(!href||/^(https?:|mailto:|tel:|#|javascript:|data:|blob:)/i.test(href))return;if(go(href))e.preventDefault();},true);})();</script>`;
 }
@@ -60,4 +60,10 @@ export function testFiles(files: FileMap): string[] {
     if (path.endsWith('.json')) { try { JSON.parse(content); } catch { problems.push(`${path}: অবৈধ JSON`); } }
   }
   return problems;
+}
+
+/** Published viewer: re-wrap a stored page with the runtime and the full page map. */
+export function withRuntime(pageHtml: string, map: Record<string, string>, store: Record<string, string>): string {
+  const rt = runtime(Object.keys(map), store, `window.__nbPages=${JSON.stringify(map).replace(/</g, '\\u003c')};`);
+  return /<head[^>]*>/i.test(pageHtml) ? pageHtml.replace(/<head[^>]*>/i, m => m + rt) : rt + pageHtml;
 }
