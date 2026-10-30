@@ -13,11 +13,16 @@ async function admin() { return (await import('@/integrations/supabase/client.se
 export async function candidates(role: AgentRole): Promise<Candidate[]> {
   const out: Candidate[] = [];
   const lk = process.env['LOVABLE_API_KEY'];
-  if (lk) out.push({ label: `Lovable AI · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role], vision: true });
   try {
     const db = await admin();
     const { data } = await db.from('ai_keys').select('id, provider, api_key, cooldown_until, use_count').order('use_count', { ascending: true });
     const now = Date.now();
+    if (lk) {
+      // Lovable AI status lives in a marker row (provider 'lovable', no real key stored) so settings can show it.
+      let row = (data ?? []).find(k => k.provider === 'lovable');
+      if (!row) { const ins = await db.from('ai_keys').insert({ provider: 'lovable', api_key: 'builtin', label: 'Lovable AI (ডিফল্ট)' }).select('id, provider, api_key, cooldown_until, use_count').single(); row = ins.data ?? undefined; }
+      if (!row?.cooldown_until || new Date(row.cooldown_until).getTime() <= now) out.push({ label: `Lovable AI · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role], vision: true, keyId: row?.id, builtin: true });
+    }
     for (const k of data ?? []) {
       if (k.cooldown_until && new Date(k.cooldown_until).getTime() > now) continue;
       const p = PROVIDERS.find(x => x.id === k.provider); if (!p) continue;
@@ -28,11 +33,18 @@ export async function candidates(role: AgentRole): Promise<Candidate[]> {
 }
 
 /** Lovable AI first; then pool keys grouped by provider, so a failing key falls to the same provider's other key before the next provider. */
-export function orderCandidates<T extends { keyId?: string; label: string }>(list: T[]): T[] {
-  const builtin = list.filter(c => !c.keyId), pool = list.filter(c => c.keyId);
+export function orderCandidates<T extends { keyId?: string; label: string; builtin?: boolean }>(list: T[]): T[] {
+  const builtin = list.filter(c => c.builtin || !c.keyId), pool = list.filter(c => !c.builtin && c.keyId);
   const groups = new Map<string, T[]>();
   for (const c of pool) { const p = c.label.split(' · ')[0]!; groups.set(p, [...(groups.get(p) ?? []), c]); }
   return [...builtin, ...[...groups.values()].flat()].slice(0, 24);
+}
+
+/** User-facing message once every model failed twice. */
+export function noBalanceMessage(codes: number[], errors: string[]) {
+  if (!errors.length) return 'কোনো AI মডেল এখন ব্যবহারযোগ্য নেই — সব API key-এর ব্যালেন্স বা লিমিট শেষ। সেটিংসে নতুন key যোগ করুন বা কিছুক্ষণ পরে চেষ্টা করুন।';
+  if (codes.length && codes.every(c => [401, 402, 403, 429].includes(c))) return 'কোনো API-তে ব্যালেন্স বা লিমিট বাকি নেই (402/429)। সেটিংসে নতুন key যোগ করুন বা লিমিট রিসেট হওয়া পর্যন্ত অপেক্ষা করুন।';
+  return 'সব মডেলে দুইবার চেষ্টা করেও উত্তর আসেনি: ' + errors.slice(0, 8).join(', ');
 }
 
 /** Reads provider rate-limit headers (OpenAI-style, Groq, OpenRouter, GitHub). */
@@ -72,27 +84,30 @@ export async function mark(keyId: string | undefined, ok: boolean, status = 0, h
 export async function openStream(role: AgentRole, messages: Msg[], json: boolean, signal: AbortSignal, attempt = 0): Promise<{ body: ReadableStream<Uint8Array>; label: string }> {
   const hasImages = messages.some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image_url'));
   const textOnly = messages.map(m => Array.isArray(m.content) ? { ...m, content: m.content.map(p => p.type === 'text' ? p.text : '[ছবি সংযুক্ত]').join('\n') } : m);
+  const errors: string[] = [], codes: number[] = [];
+  for (let round = 0; round < 2; round++) {
+  if (round) await new Promise(r => setTimeout(r, 2500));
   const list = await candidates(role);
-  if (!list.length) throw new Error('কোনো AI প্রোভাইডার পাওয়া যায়নি। সেটিংসে API key যোগ করুন।');
-  const errors: string[] = [];
+  if (!list.length) continue;
   const ordered = orderCandidates(list);
   // A retry (attempt > 0) starts on a different model so a bad answer is not repeated.
   const k = attempt % Math.max(1, ordered.length);
   const tries = [...ordered.slice(k), ...ordered.slice(0, k)];
   for (const c of tries) {
     try {
-      const body = { model: c.model, messages: hasImages && !c.vision ? textOnly : messages, stream: true, ...(c.keyId ? { temperature: 0.3 } : {}), ...(json ? { response_format: { type: 'json_object' } } : {}) };
+      const body = { model: c.model, messages: hasImages && !c.vision ? textOnly : messages, stream: true, ...(!c.builtin ? { temperature: 0.3 } : {}), ...(json ? { response_format: { type: 'json_object' } } : {}) };
       const r = await fetch(c.url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.key}` }, body: JSON.stringify(body) });
       if (r.ok && r.body) { void mark(c.keyId, true, r.status, r.headers, undefined, c.model); return { body: r.body, label: c.label }; }
       const errText = await r.text().catch(() => '');
-      errors.push(`${c.label}: ${r.status}`); void mark(c.keyId, false, r.status, r.headers, `${r.status} ${errText.replace(/\s+/g, ' ').slice(0, 200)}`, c.model);
+      errors.push(`${c.label}: ${r.status}`); codes.push(r.status); void mark(c.keyId, false, r.status, r.headers, `${r.status} ${errText.replace(/\s+/g, ' ').slice(0, 200)}`, c.model);
     } catch (e) {
       if (signal.aborted) throw e;
       errors.push(`${c.label}: সংযোগ ব্যর্থ`); void mark(c.keyId, false);
     }
   }
+  }
   console.error('all providers failed', errors);
-  throw new Error('সব প্রোভাইডার ব্যস্ত বা কোটা শেষ: ' + errors.join(', '));
+  throw new Error(noBalanceMessage(codes, errors));
 }
 
 /** Converts OpenAI SSE into NDJSON lines {message:{content}} for the browser. */

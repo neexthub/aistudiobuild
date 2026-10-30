@@ -181,7 +181,7 @@ function Builder() {
       }
       setPanel('workspace');
     } catch (e) { setError(abort.signal.aborted ? 'কাজ বন্ধ করা হয়েছে; source অপরিবর্তিত আছে।' : (e as Error).message); }
-    finally { setBusy(false); setStreaming(''); ctrl.current = null; }
+    finally { setBusy(false); setLive({}); setStreaming(''); ctrl.current = null; }
   };
   const html = bundleHtml(files) ?? project.html ?? '';
   const publish = async () => {
