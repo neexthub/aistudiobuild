@@ -6,6 +6,6 @@ describe('build and test agents', () => {
   it('reports missing files and JS syntax errors', () => {
     expect(testFiles(files)).toEqual([]);
     expect(testFiles({ ...files, 'js/app.js': 'let = ;' }).length).toBe(1);
-    const { ['css/style.css']: _, ...rest } = files; expect(testFiles(rest)).toContain('css/style.css ফাইল নেই');
+    const { ['css/style.css']: _, ...rest } = files; expect(testFiles(rest)).toContain('index.html: css/style.css ফাইল নেই');
   });
 });
