@@ -140,7 +140,7 @@ function Builder() {
       const hasApp = !!files['index.html'];
       if (mode === 'agents' && hasApp) {
         setView('terminal'); setPanel('workspace');
-        const list = Object.entries(files).map(([p, c]) => `--- ${p}\n${c.slice(0, 2500)}`).join('\n').slice(0, 9000);
+        const list = Object.entries(files).map(([p, c]) => `--- ${p}\n${c.slice(0, 14000)}`).join('\n').slice(0, 40000);
         let full = '';
         const convo: ChatMsg[] = [{ role: 'user', content: `অনুরোধ: ${fullGoal}\n${memory ? 'চ্যাট মেমরি:\n' + memory + '\n' : ''}${[...imgs, ...assets].length ? 'imageLinks:\n' + [...imgs, ...assets].join('\n') + '\n' : ''}বর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }];
         let reply = '', log: { cmd: string; output: string; error?: boolean }[] = [];
