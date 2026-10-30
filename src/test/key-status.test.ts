@@ -9,3 +9,11 @@ describe('key status rules', () => {
   it('reads remaining requests from headers', () => { const r = rateInfo(new Headers({ 'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-remaining-tokens': '5000' })); expect(r.rate_limit).toBe(1000); expect(r.rate_remaining).toBe(998); expect(r.token_remaining).toBe(5000); });
   it('labels usable vs paused keys', () => { expect(keyState({ cooling: false, status: 200 }).label).toContain('ব্যবহারযোগ্য'); expect(keyState({ cooling: true, status: 402 }).label).toContain('ক্রেডিট'); });
 });
+
+import { orderCandidates } from '@/lib/ai-router.server';
+describe('key order', () => {
+  it('tries Lovable AI first, then the same provider\'s other key before the next provider', () => {
+    const list = [{ label: 'Lovable AI · x' }, { label: 'Groq · a', keyId: '1' }, { label: 'Gemini · b', keyId: '2' }, { label: 'Groq · a', keyId: '3' }];
+    expect(orderCandidates(list).map(c => c.keyId ?? 'lovable')).toEqual(['lovable', '1', '3', '2']);
+  });
+});
