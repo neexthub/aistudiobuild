@@ -10,3 +10,7 @@
 - [x] Planner → parallel subagents → quality → test → build → publish
 - [x] Real publish link for multi-file apps
 - [x] Visible agent terminal: agent file commands (ls/cat/create/edit/rm) shown live; user can run them too
+
+- [ ] Fix agent stream abort (planner stalls)
+- [ ] Lovable-style inline work steps in chat (read/edit/run, click for details)
+- [ ] Auto-switch to another model when one fails mid-stream
