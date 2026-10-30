@@ -11,22 +11,23 @@ const ctxOf = (files: FileMap, paths: string[], cap = 40000) => {
 };
 
 /** Planner → parallel coders → quality agent (fix loop) → test agent → build agent. */
-export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void): Promise<{ files: FileMap; html: string }> {
+export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[] } = {}): Promise<{ files: FileMap; html: string }> {
   let run: RunRecord = { id: crypto.randomUUID(), createdAt: Date.now(), goal, state: 'planning', summary: 'পরিকল্পনা এজেন্ট কাজ ভাগ করছে', tasks: [], logs: [] };
   const notify = () => changed(structuredClone(run));
   const log = (m: string) => { run.logs.push(m); notify(); };
   const provider = (who: string) => (label: string) => log(`${who} → ${label}`);
+  const shared = { chatMemory: extra.memory || undefined, imageLinks: [...(extra.images ?? []), ...(extra.assets ?? [])] };
   notify();
   try {
     let planText = '';
-    const planText2 = await streamChat({ role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files) }) }], format: 'json', signal, onToken: t => { planText += t; token(planText); } });
+    const planText2 = await streamChat({ role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images, format: 'json', signal, onToken: t => { planText += t; token(planText); } });
     const plan = validatePlan(jsonReply(planText2));
     let candidate = { ...files };
     run = { ...run, state: 'running', summary: plan.summaryBn, tasks: plan.tasks.map(task => ({ ...task, state: 'queued' })) };
     log(`${plan.tasks.length}টি সাব-এজেন্ট তৈরি হয়েছে; একসাথে প্যারালালে চলবে।`);
     await executePlan(plan, signal, async task => {
       const context = ctxOf(candidate, [...new Set([...task.readPaths, ...task.writePaths])]);
-      const reply = await streamChat({ role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context }) }], signal, format: 'json', onToken: () => {} });
+      const reply = await streamChat({ role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal, format: 'json', onToken: () => {} });
       const result = outputSchema.parse(jsonReply(reply));
       const ops = result.operations.filter(op => op.op !== 'delete').map(op => op.op === 'update' && candidate[op.path] === undefined ? { op: 'create' as const, path: op.path, content: op.content } : op.op === 'update' ? { ...op, expectedHash: contentHash(candidate[op.path] ?? '') } : op.op === 'create' && candidate[op.path] !== undefined ? { op: 'update' as const, path: op.path, expectedHash: contentHash(candidate[op.path] ?? ''), content: op.content } : op);
       candidate = applyOperations(candidate, ops, task.writePaths);
