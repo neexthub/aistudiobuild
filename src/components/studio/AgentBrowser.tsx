@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { bundleHtml, htmlPages } from '@/lib/project/bundle';
 import type { FileMap } from '@/lib/project/files';
 
-type Log = { id: string; kind: 'info' | 'act' | 'error' | 'shot' | 'ok'; text: string; shot?: string };
+type Log = { id: string; kind: 'info' | 'act' | 'error' | 'shot' | 'ok'; text: string; shot?: string | undefined };
 
 /** Agent-side script: reports errors, shows a fake cursor, performs clicks/typing and takes screenshots on request. */
 const AGENT_SCRIPT = `<script data-nb-agent>(function(){function rep(m){try{parent.postMessage({nbT:'err',msg:String(m).slice(0,300)},'*')}catch(e){}}
