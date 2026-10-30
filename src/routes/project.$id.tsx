@@ -42,7 +42,7 @@ function Builder() {
     if (!p) nav({ to: "/dashboard" }); else setProject(p);
     taRef.current?.focus();
   }, [id, nav]);
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [project?.messages.length, streaming]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [project?.messages.length, streaming]);
 
   if (!project) return null;
 

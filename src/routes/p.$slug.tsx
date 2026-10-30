@@ -17,7 +17,7 @@ export const Route = createFileRoute("/p/$slug")({
 function Published() {
   const { slug } = Route.useParams();
   const [html, setHtml] = useState<string | null | undefined>(undefined);
-  useEffect(() => setHtml(getPublished(slug)?.publishedHtml ?? null), [slug]);
+  useEffect(() => { setHtml(getPublished(slug)?.publishedHtml ?? null); }, [slug]);
 
   if (html === undefined) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">লোড হচ্ছে…</div>;
   if (html === null)
