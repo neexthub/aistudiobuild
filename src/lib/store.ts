@@ -3,7 +3,7 @@
 import { applyOperations, contentHash, legacyFiles, validateFiles, type FileMap, type FileOperation, type Revision } from './project/files';
 import type { RunRecord } from './agents/contracts';
 export type User = { id: string; name: string; email: string; pass: string; createdAt: number };
-export type ChatMsg = { role: "user" | "assistant"; content: string; model?: string };
+export type ChatMsg = { role: "user" | "assistant"; content: string; model?: string; images?: string[] };
 export type Project = {
   id: string;
   ownerId: string;
@@ -20,6 +20,9 @@ export type Project = {
   revisions?: Revision[];
   runs?: RunRecord[];
   kind?: 'html' | 'next';
+  /** Image links (uploaded or AI-generated) agents may embed. */
+  assets?: string[];
+  suggestions?: string[];
 };
 
 type Files = { "users.json": User[]; "projects.json": Project[]; "session.json": { userId: string | null } };
