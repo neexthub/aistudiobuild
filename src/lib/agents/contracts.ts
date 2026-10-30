@@ -16,7 +16,7 @@ export type RunRecord = { id: string; createdAt: number; goal: string; state: 'p
 export function normalizePlan(input: unknown): unknown {
   const raw = (input ?? {}) as { summaryBn?: unknown; tasks?: unknown };
   const arr = (v: unknown) => Array.isArray(v) ? v.filter(x => typeof x === 'string') as string[] : [];
-  const tasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t: Record<string, unknown>, i: number) => ({
+  const tasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t: { id?: unknown; role?: unknown; objective?: unknown; description?: unknown; dependsOn?: unknown; readPaths?: unknown; writePaths?: unknown; files?: unknown; acceptanceChecks?: unknown }, i: number) => ({
     id: String(t.id ?? `task-${i + 1}`).slice(0, 60), role: String(t.role ?? 'builder').slice(0, 60), objective: String(t.objective ?? t.description ?? 'কাজ').slice(0, 1500),
     dependsOn: arr(t.dependsOn), readPaths: arr(t.readPaths).filter(validPath), writePaths: arr(t.writePaths ?? t.files).filter(validPath).slice(0, 30),
     acceptanceChecks: arr(t.acceptanceChecks).length ? arr(t.acceptanceChecks).map(c => c.slice(0, 300)).slice(0, 15) : ['কাজ সম্পূর্ণ'],
