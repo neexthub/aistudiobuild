@@ -29,7 +29,7 @@ export function GhostInput({ value, onChange, onEnter, disabled }: { value: stri
   };
   const cls = 'min-h-[44px] w-full whitespace-pre-wrap break-words p-0 text-sm leading-6';
   return <div className="relative">
-    <div ref={layer} aria-hidden="true" className={`${cls} pointer-events-none absolute inset-0 overflow-hidden text-transparent`}>{value}<span className="pointer-events-auto cursor-pointer rounded-sm bg-primary/10 text-primary/60" onMouseDown={e => { e.preventDefault(); accept(); }}>{ghost}</span></div>
+    <div ref={layer} aria-hidden="true" className={`${cls} pointer-events-none absolute inset-0 z-10 overflow-hidden text-transparent`}>{value}<span className="pointer-events-auto cursor-pointer rounded-sm bg-primary/10 text-primary/60" onMouseDown={e => { e.preventDefault(); accept(); }}>{ghost}</span></div>
     <textarea ref={area} aria-label="অ্যাপের অনুরোধ" rows={2} value={value} onChange={e => onChange(e.target.value)} onKeyDown={key} onScroll={e => { if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop; }} placeholder="আপনার অ্যাপের অনুরোধ লিখুন…" className={`${cls} relative resize-none bg-transparent outline-none`} />
     {ghost && <button type="button" onClick={accept} className="mt-1 text-[10px] text-muted-foreground hover:text-primary">Tab বা ক্লিক করে সাজেশন বসান</button>}
   </div>;

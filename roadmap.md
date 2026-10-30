@@ -25,4 +25,4 @@
 - [x] OpenAI models added: own-key provider + OpenAI models through the built-in Lovable key
 - [x] Live browser check: settings dropdown (13 providers), Lovable how-to box, OpenAI how-to, live key status
 - [ ] One full multi-file build re-run after the router's new built-in OpenAI candidate
-- [ ] Inline ghost-text next-words suggestion in chat input (click/Tab to accept)
+- [x] Inline ghost-text next-words suggestion in chat input (click/Tab to accept)
