@@ -211,7 +211,7 @@ function Builder() {
           {!busy && !!project.suggestions?.length && <div className="space-y-1"><p className="flex items-center gap-1 text-[10px] text-muted-foreground"><Lightbulb className="h-3 w-3" />পরের ধাপের সাজেশন</p><div className="flex flex-wrap gap-1">{project.suggestions.map(sg => <Button key={sg} variant="outline" size="sm" className="h-auto whitespace-normal py-1 text-left text-xs" onClick={() => setInput(sg)}>{sg}</Button>)}</div></div>}
           {busy && <WorkSteps steps={[...runView, ...cmdSteps, ...(liveRun?.state === 'planning' || (!runView.length && !cmdSteps.length) ? [] : [])]} />}
           {busy && <p className="flex items-center gap-2 text-xs text-primary"><Loader2 className="h-3 w-3 animate-spin" />{liveRun?.state === 'planning' ? 'পরিকল্পনা তৈরি হচ্ছে…' : 'এজেন্ট কাজ করছে…'}</p>}
-          {busy && streaming && <p title="লাইভ আউটপুট" className="max-h-24 overflow-hidden break-all font-mono text-[10px] text-muted-foreground">{streaming.slice(-700)}</p>}
+          {busy && streaming && mode === 'html' && <p title="লাইভ আউটপুট" className="max-h-24 overflow-hidden break-all font-mono text-[10px] text-muted-foreground">{streaming.slice(-700)}</p>}
           {error && <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"><AlertCircle className="h-4 w-4 shrink-0" /><span className="break-words">{error}</span></div>}<div ref={bottom} />
         </div>
         <div className="shrink-0 space-y-2 border-t p-3">

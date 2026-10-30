@@ -31,5 +31,8 @@ function Published() {
         <Link to="/" className="rounded-lg bg-primary px-4 py-2 text-primary-foreground">NextBuild এ যান</Link>
       </div>
     );
-  return <iframe title={slug} srcDoc={html} className="h-screen w-full border-0" sandbox="allow-scripts allow-forms allow-modals allow-same-origin" />;
+  // Isolated from NextBuild's own storage; a memory shim keeps apps that use localStorage working.
+  const shim = '<script>try{window.localStorage.getItem("x")}catch(e){var m={};var s={getItem:function(k){return k in m?m[k]:null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){m={}},key:function(i){return Object.keys(m)[i]||null},get length(){return Object.keys(m).length}};Object.defineProperty(window,"localStorage",{value:s});Object.defineProperty(window,"sessionStorage",{value:s})}</script>';
+  const doc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + shim) : shim + html;
+  return <iframe title={slug} srcDoc={doc} className="h-screen w-full border-0" sandbox="allow-scripts allow-forms allow-modals allow-popups" />;
 }
