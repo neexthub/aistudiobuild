@@ -80,7 +80,7 @@ function bundleNext(files: FileMap): string {
 <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
 <script>window.react=window.React;</script>
 <script src="https://unpkg.com/lucide-react@0.460.0/dist/umd/lucide-react.min.js"></script>
-<style>${css.join('\n').replace(/<\/style/gi, '<\\/style')}</style></head><body><div id="root"></div>
+<style>body{background:#fff;color:#0f172a;margin:0}</style><style>${css.join('\n').replace(/<\/style/gi, '<\\/style')}</style></head><body><div id="root"></div>
 <script>
 (function(){
 const D=${data}; const cache={}; const R=React;
