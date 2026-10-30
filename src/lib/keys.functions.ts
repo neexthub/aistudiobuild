@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
-import { PROVIDERS } from './providers';
+import { ALL_PROVIDERS, PROVIDERS, LOVABLE_PROVIDER, BUILTIN_MODELS } from './providers';
 
 // Shared key pool (no accounts by design). Keys are write-only: the full key
 // is never returned to any browser, only a masked tail.
@@ -11,13 +11,15 @@ export const listKeys = createServerFn({ method: 'GET' }).handler(async () => {
   return { keys: (data ?? []).map(k => ({ id: k.id, provider: k.provider, label: k.label, masked: '••••••••', cooling: !!k.cooldown_until && new Date(k.cooldown_until).getTime() > Date.now(), cooldownUntil: k.cooldown_until, fails: k.fail_count, uses: k.use_count, status: k.last_status, error: k.last_error, usedAt: k.last_used_at, checkedAt: k.last_checked_at, model: k.last_model, limit: k.rate_limit, remaining: k.rate_remaining, reset: k.rate_reset, tokens: k.token_remaining })), error: null };
 });
 
+/** A user may add their own Lovable AI key here; the project's own key keeps running first. */
 export const addKey = createServerFn({ method: 'POST' })
-  .inputValidator((d: unknown) => z.object({ provider: z.string().refine(p => PROVIDERS.some(x => x.id === p)), apiKey: z.string().trim().min(8).max(400), label: z.string().max(60).default('') }).parse(d))
+  .inputValidator((d: unknown) => z.object({ provider: z.string().refine(p => ALL_PROVIDERS.some(x => x.id === p)), apiKey: z.string().trim().min(8).max(400), label: z.string().max(60).default('') }).parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
-    const { error } = await supabaseAdmin.from('ai_keys').insert({ provider: data.provider, api_key: data.apiKey, label: data.label });
-    if (error) throw new Error('কী সংরক্ষণ হয়নি');
-    return { ok: true };
+    const name = ALL_PROVIDERS.find(x => x.id === data.provider)?.name ?? data.provider;
+    const { data: row, error } = await supabaseAdmin.from('ai_keys').insert({ provider: data.provider, api_key: data.apiKey, label: data.label || name }).select('id').single();
+    if (error || !row) throw new Error('কী সংরক্ষণ হয়নি');
+    return { ok: true, id: row.id };
   });
 
 export const deleteKey = createServerFn({ method: 'POST' })
@@ -46,14 +48,17 @@ export const checkKeys = createServerFn({ method: 'POST' })
     if (data.id) q = q.eq('id', data.id);
     const { data: rows } = await q;
     await Promise.all((rows ?? []).map(async k => {
-      const lovable = k.provider === 'lovable' ? process.env['LOVABLE_API_KEY'] : undefined;
-      const p = lovable ? { baseUrl: 'https://ai.gateway.lovable.dev/v1', models: { fast: 'google/gemini-3.1-flash-lite' } } : PROVIDERS.find(x => x.id === k.provider); if (!p) return;
-      const auth = lovable ?? k.api_key;
+      const lovable = k.provider === 'lovable';
+      const p = lovable ? LOVABLE_PROVIDER : PROVIDERS.find(x => x.id === k.provider); if (!p) return;
+      const model = lovable ? BUILTIN_MODELS.fast : p.models.fast;
+      // The marker row holds no secret: it stands for the project's own key.
+      const auth = lovable ? (k.api_key && k.api_key !== 'builtin' ? k.api_key : process.env['LOVABLE_API_KEY']) : k.api_key;
+      if (!auth) { await mark(k.id, false, 0, undefined, 'লভাবলর নিজস্ব key প্রজেক্টে নাই — সেটিংসে নিজের key দিন', model); await supabaseAdmin.from('ai_keys').update({ last_checked_at: new Date().toISOString() }).eq('id', k.id); return; }
       try {
-        const r = await fetch(`${p.baseUrl}/chat/completions`, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` }, body: JSON.stringify({ model: p.models.fast, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }) });
+        const r = await fetch(`${p.baseUrl}/chat/completions`, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` }, body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }) });
         const t = r.ok ? '' : await r.text().catch(() => '');
-        await mark(k.id, r.ok, r.status, r.headers, r.ok ? undefined : `${r.status} ${t.replace(/\s+/g, ' ').slice(0, 200)}`, p.models.fast);
-      } catch { await mark(k.id, false, 0, undefined, 'সংযোগ ব্যর্থ / সময় শেষ', p.models.fast); }
+        await mark(k.id, r.ok, r.status, r.headers, r.ok ? undefined : `${r.status} ${t.replace(/\s+/g, ' ').slice(0, 200)}`, model);
+      } catch { await mark(k.id, false, 0, undefined, 'সংযোগ ব্যর্থ / সময় শেষ', model); }
       await supabaseAdmin.from('ai_keys').update({ last_checked_at: new Date().toISOString() }).eq('id', k.id);
     }));
     return { ok: true };

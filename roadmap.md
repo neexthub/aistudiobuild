@@ -20,3 +20,8 @@
 - [x] Settings: show Lovable AI usage/limit status
 - [x] Lovable AI first; on limit → auto switch; after all fail → one more full round; then tell user "no balance on any API"
 - [x] Files appear live in file manager while AI writes; preview opens after run
+## Lovable API + OpenAI (Oct 31)
+- [x] Settings: add your own Lovable AI key (with how-to-get steps); runs right after the built-in key
+- [x] OpenAI models added: own-key provider + OpenAI models through the built-in Lovable key
+- [x] Live browser check: settings dropdown (13 providers), Lovable how-to box, OpenAI how-to, live key status
+- [ ] One full multi-file build re-run after the router's new built-in OpenAI candidate
