@@ -27,17 +27,36 @@ export async function candidates(role: AgentRole): Promise<Candidate[]> {
   return out;
 }
 
-async function mark(keyId: string | undefined, ok: boolean, status = 0) {
+/** Reads provider rate-limit headers (OpenAI-style, Groq, OpenRouter, GitHub). */
+export function rateInfo(h: Headers) {
+  const num = (...n: string[]) => { for (const k of n) { const v = h.get(k); if (v != null && v !== '' && !isNaN(Number(v))) return Math.round(Number(v)); } return null; };
+  return {
+    rate_limit: num('x-ratelimit-limit-requests', 'x-ratelimit-limit', 'x-ratelimit-limit-requests-day'),
+    rate_remaining: num('x-ratelimit-remaining-requests', 'x-ratelimit-remaining', 'x-ratelimit-remaining-requests-day'),
+    token_remaining: num('x-ratelimit-remaining-tokens'),
+    rate_reset: h.get('x-ratelimit-reset-requests') ?? h.get('x-ratelimit-reset') ?? h.get('retry-after'),
+  };
+}
+
+/** Cooldown per status: auth/credit problems long, rate limits short (honours Retry-After). */
+export function cooldownSecs(status: number, retryAfter?: string | null) {
+  if (status === 401 || status === 403) return 86400;
+  if (status === 402) return 6 * 3600;
+  if (status === 404 || status === 410) return 3600;
+  if (status === 429) { const r = Number(retryAfter); return r > 0 && r < 3600 ? Math.ceil(r) : 90; }
+  return 30;
+}
+
+export async function mark(keyId: string | undefined, ok: boolean, status = 0, headers?: Headers, error?: string, model?: string) {
   if (!keyId) return;
   try {
     const db = await admin();
     const { data } = await db.from('ai_keys').select('use_count, fail_count').eq('id', keyId).single();
     if (!data) return;
-    if (ok) await db.from('ai_keys').update({ use_count: data.use_count + 1, fail_count: 0 }).eq('id', keyId);
-    else {
-      const secs = status === 401 || status === 403 ? 86400 : status === 429 ? 90 : 30;
-      await db.from('ai_keys').update({ fail_count: data.fail_count + 1, cooldown_until: new Date(Date.now() + secs * 1000).toISOString() }).eq('id', keyId);
-    }
+    const info = headers ? rateInfo(headers) : {};
+    const common = { ...info, last_status: status || null, last_used_at: new Date().toISOString(), ...(model ? { last_model: model } : {}) };
+    if (ok) await db.from('ai_keys').update({ ...common, use_count: data.use_count + 1, fail_count: 0, last_error: null, cooldown_until: null }).eq('id', keyId);
+    else await db.from('ai_keys').update({ ...common, last_error: (error ?? 'সংযোগ ব্যর্থ').slice(0, 300), fail_count: data.fail_count + 1, cooldown_until: new Date(Date.now() + cooldownSecs(status, headers?.get('retry-after')) * 1000).toISOString() }).eq('id', keyId);
   } catch (e) { console.error('key mark failed', e); }
 }
 
@@ -56,9 +75,9 @@ export async function openStream(role: AgentRole, messages: Msg[], json: boolean
     try {
       const body = { model: c.model, messages: hasImages && !c.vision ? textOnly : messages, stream: true, ...(c.keyId ? { temperature: 0.3 } : {}), ...(json ? { response_format: { type: 'json_object' } } : {}) };
       const r = await fetch(c.url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.key}` }, body: JSON.stringify(body) });
-      if (r.ok && r.body) { void mark(c.keyId, true); return { body: r.body, label: c.label }; }
-      errors.push(`${c.label}: ${r.status}`); void mark(c.keyId, false, r.status);
-      await r.body?.cancel().catch(() => {});
+      if (r.ok && r.body) { void mark(c.keyId, true, r.status, r.headers, undefined, c.model); return { body: r.body, label: c.label }; }
+      const errText = await r.text().catch(() => '');
+      errors.push(`${c.label}: ${r.status}`); void mark(c.keyId, false, r.status, r.headers, `${r.status} ${errText.replace(/\s+/g, ' ').slice(0, 200)}`, c.model);
     } catch (e) {
       if (signal.aborted) throw e;
       errors.push(`${c.label}: সংযোগ ব্যর্থ`); void mark(c.keyId, false);
