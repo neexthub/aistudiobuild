@@ -46,9 +46,11 @@ export const checkKeys = createServerFn({ method: 'POST' })
     if (data.id) q = q.eq('id', data.id);
     const { data: rows } = await q;
     await Promise.all((rows ?? []).map(async k => {
-      const p = PROVIDERS.find(x => x.id === k.provider); if (!p) return;
+      const lovable = k.provider === 'lovable' ? process.env['LOVABLE_API_KEY'] : undefined;
+      const p = lovable ? { baseUrl: 'https://ai.gateway.lovable.dev/v1', models: { fast: 'google/gemini-3.1-flash-lite' } } : PROVIDERS.find(x => x.id === k.provider); if (!p) return;
+      const auth = lovable ?? k.api_key;
       try {
-        const r = await fetch(`${p.baseUrl}/chat/completions`, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${k.api_key}` }, body: JSON.stringify({ model: p.models.fast, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }) });
+        const r = await fetch(`${p.baseUrl}/chat/completions`, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` }, body: JSON.stringify({ model: p.models.fast, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 }) });
         const t = r.ok ? '' : await r.text().catch(() => '');
         await mark(k.id, r.ok, r.status, r.headers, r.ok ? undefined : `${r.status} ${t.replace(/\s+/g, ' ').slice(0, 200)}`, p.models.fast);
       } catch { await mark(k.id, false, 0, undefined, 'সংযোগ ব্যর্থ / সময় শেষ', p.models.fast); }
