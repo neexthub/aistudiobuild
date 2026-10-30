@@ -18,7 +18,7 @@ export function PromptSuggestions({ value, busy, enabled, setEnabled, accept }: 
         const status = await checkStatus();
         if (controller.signal.aborted) return;
         if (!status.models.includes(MODELS.reason)) { setError('সাজেশনের জন্য Qwen 14B ইনস্টল প্রয়োজন।'); return; }
-        const text = await streamChat({ model: MODELS.reason, system: SUGGESTION_SYSTEM, messages: [{ role: 'user', content: value.slice(0, 600) }], signal: controller.signal, onToken: () => {} });
+        const text = await streamChat({ role: 'fast', system: SUGGESTION_SYSTEM, messages: [{ role: 'user', content: value.slice(0, 600) }], signal: controller.signal, onToken: () => {} });
         if (!controller.signal.aborted) setSuggestion(text.trim().slice(0, 180));
       } catch { if (!controller.signal.aborted) setError('সাজেশন পাওয়া যায়নি।'); }
     }, 1500);

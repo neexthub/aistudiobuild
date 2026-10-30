@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getPublished } from "@/lib/store";
+import { getPublishedApp } from "@/lib/publish.functions";
 
 export const Route = createFileRoute("/p/$slug")({
   head: ({ params }) => ({
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/p/$slug")({
 function Published() {
   const { slug } = Route.useParams();
   const [html, setHtml] = useState<string | null | undefined>(undefined);
-  useEffect(() => { setHtml(getPublished(slug)?.publishedHtml ?? null); }, [slug]);
+  useEffect(() => { let live = true; getPublishedApp({ data: { slug } }).then(r => { if (live) setHtml(r?.html ?? getPublished(slug)?.publishedHtml ?? null); }).catch(() => { if (live) setHtml(getPublished(slug)?.publishedHtml ?? null); }); return () => { live = false; }; }, [slug]);
 
   if (html === undefined) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">লোড হচ্ছে…</div>;
   if (html === null)

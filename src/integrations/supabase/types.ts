@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_keys: {
+        Row: {
+          api_key: string
+          cooldown_until: string | null
+          created_at: string
+          fail_count: number
+          id: string
+          label: string
+          provider: string
+          use_count: number
+        }
+        Insert: {
+          api_key: string
+          cooldown_until?: string | null
+          created_at?: string
+          fail_count?: number
+          id?: string
+          label?: string
+          provider: string
+          use_count?: number
+        }
+        Update: {
+          api_key?: string
+          cooldown_until?: string | null
+          created_at?: string
+          fail_count?: number
+          id?: string
+          label?: string
+          provider?: string
+          use_count?: number
+        }
+        Relationships: []
+      }
       published_apps: {
         Row: {
           html: string
