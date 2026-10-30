@@ -19,3 +19,4 @@
 - SSE→NDJSON pull must loop until it enqueues, or the stream stalls.
 - Router order: Lovable AI, then pool keys grouped by provider (same provider's other key before next provider); agent steps have per-attempt time budgets so slow models hand over.
 - Full-mode agents get free keyless web search (/api/ai/search: DuckDuckGo, Wikipedia fallback) as untrusted webNotes.
+- The AI live browser (AgentBrowser) runs its own sandboxed iframe, talks via postMessage filtered by e.source, and screenshots via SVG foreignObject because html2canvas cannot read opaque-origin frames.
