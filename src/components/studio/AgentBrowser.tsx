@@ -25,7 +25,7 @@ if(d.nbT==='shot'){var go=function(){window.html2canvas(document.body,{scale:.5,
 const withAgent = (html: string) => /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + AGENT_SCRIPT) : AGENT_SCRIPT + html;
 
 /** Separate "AI live browser": runs its own copy of the app, clicks through every page, screenshots, collects errors, and can hand them to the fix agent. */
-export function AgentBrowser({ files, autoRun, busy, onFix, onReport }: { files: FileMap; autoRun: number; busy: boolean; onFix: (issues: string[]) => void; onReport: (text: string) => void }) {
+export function AgentBrowser({ files, autoRun, busy, onFix, onManualFix, onReport }: { files: FileMap; autoRun: number; busy: boolean; onFix: (issues: string[]) => void; onManualFix: (issues: string[]) => void; onReport: (text: string) => void }) {
   const frame = useRef<HTMLIFrameElement>(null), loaded = useRef<(() => void) | null>(null), stop = useRef(false), errs = useRef<string[]>([]);
   const [page, setPage] = useState('index.html'), [key, setKey] = useState(0), [running, setRunning] = useState(false), [logs, setLogs] = useState<Log[]>([]), [mobile, setMobile] = useState(false), [issues, setIssues] = useState<string[]>([]);
   const filesRef = useRef(files); filesRef.current = files;
@@ -108,7 +108,7 @@ export function AgentBrowser({ files, autoRun, busy, onFix, onReport }: { files:
         {logs.map(l => <div key={l.id} className={l.kind === 'error' ? 'text-destructive' : l.kind === 'ok' ? 'text-success' : l.kind === 'act' ? 'text-primary' : 'text-muted-foreground'}>{l.kind === 'shot' ? <figure><figcaption>📸 {l.text}</figcaption><img src={l.shot} alt={l.text} className="mt-1 w-full rounded border" /></figure> : <p className="break-words">{l.kind === 'error' ? '✗ ' : l.kind === 'ok' ? '✓ ' : '› '}{l.text}</p>}</div>)}
         {running && <p className="flex items-center gap-1 text-primary"><Loader2 className="h-3 w-3 animate-spin" />চলছে…</p>}
       </div>
-      {!running && issues.length > 0 && <div className="shrink-0 border-t p-2"><Button size="sm" className="w-full" disabled={busy} onClick={() => onFix(issues)}><Wrench />AI দিয়ে {issues.length}টি সমস্যা ঠিক করুন</Button></div>}
+      {!running && issues.length > 0 && <div className="shrink-0 border-t p-2"><Button size="sm" className="w-full" disabled={busy} onClick={() => onManualFix(issues)}><Wrench />AI দিয়ে {issues.length}টি সমস্যা ঠিক করুন</Button></div>}
     </aside>
   </div>;
 }
