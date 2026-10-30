@@ -34,6 +34,8 @@ function Builder() {
   const { id } = Route.useParams(), nav = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [live, setLive] = useState<Record<string, string>>({});
+  const [previewPage, setPreviewPage] = useState('index.html'); const previewStore = useRef<Record<string, string>>({});
+  useEffect(() => { const on = (e: MessageEvent) => { const d = e.data as { nbNav?: unknown; store?: unknown }; if (typeof d?.nbNav === 'string' && /^[\w./-]+\.html$/.test(d.nbNav)) { if (d.store && typeof d.store === 'object') previewStore.current = d.store as Record<string, string>; setPreviewPage(d.nbNav); } }; window.addEventListener('message', on); return () => window.removeEventListener('message', on); }, []);
   const [input, setInput] = useState(''), [mode, setMode] = useState<'agents' | 'html'>('agents');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [streaming, setStreaming] = useState('');
   const [view, setView] = useState<View>('preview'), [panel, setPanel] = useState<'chat' | 'workspace'>('chat');
@@ -183,7 +185,7 @@ function Builder() {
     } catch (e) { setError(abort.signal.aborted ? 'কাজ বন্ধ করা হয়েছে; source অপরিবর্তিত আছে।' : (e as Error).message); }
     finally { setBusy(false); setLive({}); setStreaming(''); ctrl.current = null; }
   };
-  const html = bundleHtml(files) ?? project.html ?? '';
+  const html = bundleHtml(files, previewPage, previewStore.current) ?? project.html ?? '';
   const publish = async () => {
     if (!html) return; setPublishing(true); setError('');
     try {

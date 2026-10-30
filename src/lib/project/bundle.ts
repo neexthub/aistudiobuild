@@ -21,21 +21,27 @@ function inlinePage(files: FileMap, page: string): string | null {
 
 export const htmlPages = (files: FileMap) => Object.keys(files).filter(p => p.endsWith('.html')).sort((a, b) => (a === 'index.html' ? -1 : b === 'index.html' ? 1 : a.localeCompare(b)));
 
-/** Build step: one runnable document; links between local .html pages keep working inside the preview. */
-export function bundleHtml(files: FileMap, entry = 'index.html'): string | null {
+/** Preview helpers injected into every page: in-memory localStorage when the sandbox blocks it, and local .html link routing. */
+function runtime(pages: string[], store: Record<string, string>, embedded: string): string {
+  return `<script data-nb-runtime>(function(){var S=${JSON.stringify(store).replace(/</g, '\\u003c')};
+try{window.localStorage.getItem('x')}catch(e){var mk=function(){return{getItem:function(k){return Object.prototype.hasOwnProperty.call(S,k)?S[k]:null},setItem:function(k,v){S[k]=String(v)},removeItem:function(k){delete S[k]},clear:function(){for(var k in S)delete S[k]},key:function(i){return Object.keys(S)[i]||null},get length(){return Object.keys(S).length}}};Object.defineProperty(window,'localStorage',{value:mk(),configurable:true});Object.defineProperty(window,'sessionStorage',{value:mk(),configurable:true});}
+var P=${JSON.stringify(pages)};${embedded}
+function go(h){var k=h.replace(/^\\.?\\//,'').split(/[?#]/)[0]||'index.html';if(P.indexOf(k)<0)return false;
+if(window.parent!==window){window.parent.postMessage({nbNav:k,store:S},'*');return true;}
+if(window.__nbPages){location.href=URL.createObjectURL(new Blob([window.__nbPages[k]],{type:'text/html'}));return true;}return false;}
+window.__nbGo=go;document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');if(!a)return;var href=a.getAttribute('href');if(!href||/^(https?:|mailto:|tel:|#|javascript:|data:|blob:)/i.test(href))return;if(go(href))e.preventDefault();},true);})();</script>`;
+}
+
+/** Build step: one runnable page. `store` carries preview localStorage across page switches. `standalone` embeds all pages (for published links). */
+export function bundleHtml(files: FileMap, entry = 'index.html', store: Record<string, string> = {}, standalone = false): string | null {
   const pages = htmlPages(files);
   if (!pages.length) return null;
   const start = files[entry] !== undefined ? entry : pages[0]!;
-  const first = inlinePage(files, start)!;
-  if (pages.length === 1) return first;
-  const map: Record<string, string> = {};
-  for (const p of pages) map[p] = inlinePage(files, p)!;
-  const data = JSON.stringify(map).replace(/</g, '\\u003c');
-  const router = `<script data-nb-router>(function(){if(window.__nbPages)return;window.__nbPages=${data};
-function go(p){var k=p.replace(/^\\.?\\//,'').split(/[?#]/)[0]||'index.html';if(!window.__nbPages[k])return false;var h=window.__nbPages[k];document.open();document.write(h);document.close();setTimeout(bind,0);scrollTo(0,0);return true;}
-function bind(){document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');if(!a)return;var href=a.getAttribute('href');if(!href||/^(https?:|mailto:|tel:|#|javascript:)/i.test(href))return;if(go(href))e.preventDefault();},true);}
-window.__nbGo=go;bind();})();</script>`;
-  return /<head[^>]*>/i.test(first) ? first.replace(/<head[^>]*>/i, m => m + router) : router + first;
+  const page = inlinePage(files, start)!;
+  let embedded = '';
+  if (standalone && pages.length > 1) { const map: Record<string, string> = {}; for (const p of pages) map[p] = inlinePage(files, p)!; embedded = `window.__nbPages=${JSON.stringify(map).replace(/</g, '\\u003c')};`; }
+  const rt = runtime(pages, store, embedded);
+  return /<head[^>]*>/i.test(page) ? page.replace(/<head[^>]*>/i, m => m + rt) : rt + page;
 }
 
 /** Test step: static checks a real user would hit at runtime. */
