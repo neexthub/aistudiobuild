@@ -14,7 +14,7 @@ const ctxOf = (files: FileMap, paths: string[], cap = 40000) => {
 const timed = (signal: AbortSignal, ms: number) => AbortSignal.any([signal, AbortSignal.timeout(ms)]);
 
 /** Planner → parallel coders → quality agent (fix loop) → test agent → build agent. */
-export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[] } = {}): Promise<{ files: FileMap; html: string }> {
+export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[]; onDraft?: (files: FileMap) => void } = {}): Promise<{ files: FileMap; html: string }> {
   let run: RunRecord = { id: crypto.randomUUID(), createdAt: Date.now(), goal, state: 'planning', summary: 'পরিকল্পনা এজেন্ট কাজ ভাগ করছে', tasks: [], logs: [] };
   const notify = () => changed(structuredClone(run));
   const log = (m: string) => { run.logs.push(m); notify(); };
@@ -48,6 +48,7 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
       log(`${task.id}: ${result.summaryBn}`);
     }, (id, state) => { run.tasks = run.tasks.map(task => task.id === id ? { ...task, state } : task); notify(); });
 
+    extra.onDraft?.(candidate); log('প্রিভিউ: খসড়া অ্যাপ প্রিভিউতে দেখানো হচ্ছে, মান যাচাই চলছে।');
     // Quality + test loop: up to 2 repair rounds.
     for (let round = 1; round <= 2; round++) {
       run.state = 'reviewing'; run.summary = `মান যাচাই এজেন্ট (রাউন্ড ${round})`; notify();

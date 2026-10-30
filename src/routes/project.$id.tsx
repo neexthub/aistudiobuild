@@ -166,7 +166,7 @@ function Builder() {
       } else if (mode === 'agents') {
         setView('preview');
         const base: typeof files = { ...files };
-        const { files: generated } = await buildWithAgents(fullGoal, base, abort.signal, persistRun, value => setStreaming(value), { images: imgs, memory, assets });
+        const { files: generated } = await buildWithAgents(fullGoal, base, abort.signal, persistRun, value => setStreaming(value), { images: imgs, memory, assets, onDraft: draft => { assign(saveProjectFiles(id, draft, 'এজেন্ট খসড়া', 'html')); setFrameKey(k => k + 1); } });
         const result = saveProjectFiles(id, generated, 'এজেন্ট আপডেট', 'html');
         setTerm(t => [...t, ...fileChanges(base, generated).map(c => ({ who: 'agent' as const, cmd: `${c.kind === 'deleted' ? 'rm' : 'write'} ${c.path}`, output: c.kind === 'added' ? '+ নতুন ফাইল' : c.kind === 'deleted' ? '− মুছে ফেলা' : '~ পরিবর্তিত' })), { who: 'agent', cmd: 'build', output: '✓ বিল্ড ও টেস্ট শেষ' }]);
         const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: `কাজ শেষ! ${Object.keys(generated).length}টি ফাইল তৈরি, মান যাচাই ও টেস্ট হয়েছে। প্রিভিউ দেখুন, তারপর পাবলিশ করুন।`, model: MODELS.fast, steps: [...runViewRef.current, ...fileChanges(base, generated).map(c => commandStep(c.kind === 'deleted' ? 'rm ' + c.path : 'write ' + c.path, c.kind))] }] }); if (updated) assign(updated);
