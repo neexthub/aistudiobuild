@@ -20,7 +20,7 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
   notify();
   try {
     const found = await webSearch(goal.slice(0, 200), signal);
-    if (found.results.length) { shared.webNotes = found.results.map(r => `${r.title}: ${r.snippet} (${r.url})`).join('\n').slice(0, 3000); log(`সার্চ এজেন্ট: অনলাইনে ${found.results.length}টি ফল পাওয়া গেছে (${found.source})`); }
+    if (found.results.length) { shared['webNotes'] = found.results.map(r => `${r.title}: ${r.snippet} (${r.url})`).join('\n').slice(0, 3000); log(`সার্চ এজেন্ট: অনলাইনে ${found.results.length}টি ফল পাওয়া গেছে (${found.source})`); }
     else log('সার্চ এজেন্ট: অনলাইনে প্রাসঙ্গিক ফল পাওয়া যায়নি — নিজের জ্ঞানে এগোনো হচ্ছে');
     const retry = (who: string) => (n: number, e: unknown) => log(`${who}: উত্তর ব্যবহারযোগ্য হয়নি (${e instanceof Error ? e.message.slice(0, 80) : 'ত্রুটি'}) — অন্য মডেলে আবার চেষ্টা #${n}`);
     const plan = await withFallback(async attempt => {
