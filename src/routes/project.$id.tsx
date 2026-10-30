@@ -142,10 +142,18 @@ function Builder() {
         setView('terminal'); setPanel('workspace');
         const list = Object.entries(files).map(([p, c]) => `--- ${p}\n${c.slice(0, 2500)}`).join('\n').slice(0, 9000);
         let full = '';
-        const reply = await withFallback(async attempt => { full = ''; const r = await streamChat({ attempt, role: 'coder', system: SHELL_AGENT_PROMPT, messages: [{ role: 'user', content: `অনুরোধ: ${fullGoal}\n${memory ? 'চ্যাট মেমরি:\n' + memory + '\n' : ''}${[...imgs, ...assets].length ? 'imageLinks:\n' + [...imgs, ...assets].join('\n') + '\n' : ''}বর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }], images: imgs, signal: abort.signal, onProvider: label => { setTerm(t => [...t, { who: 'agent', cmd: 'model', output: label }]); pushStep(commandStep('model', label)); }, onToken: t => { full += t; setStreaming(full); } }); if (!/```(?:sh|bash|shell)?\n[\s\S]*?```/.test(r)) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।'); return r; }, abort.signal, 3, n => pushStep({ id: crypto.randomUUID(), kind: 'error', title: `উত্তরে কমান্ড ছিল না — অন্য মডেলে আবার চেষ্টা #${n}` }));
+        const convo: ChatMsg[] = [{ role: 'user', content: `অনুরোধ: ${fullGoal}\n${memory ? 'চ্যাট মেমরি:\n' + memory + '\n' : ''}${[...imgs, ...assets].length ? 'imageLinks:\n' + [...imgs, ...assets].join('\n') + '\n' : ''}বর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }];
+        let reply = '', log: { cmd: string; output: string; error?: boolean }[] = [];
+        for (let round = 0; round < 4; round++) {
+        reply = await withFallback(async attempt => { full = ''; const r = await streamChat({ attempt, role: 'coder', system: SHELL_AGENT_PROMPT, messages: [...convo], images: imgs, signal: abort.signal, onProvider: label => { setTerm(t => [...t, { who: 'agent', cmd: 'model', output: label }]); pushStep(commandStep('model', label)); }, onToken: t => { full += t; setStreaming(full); } }); if (!/```(?:sh|bash|shell)?\n[\s\S]*?```/.test(r)) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।'); return r; }, abort.signal, 3, n => pushStep({ id: crypto.randomUUID(), kind: 'error', title: `উত্তরে কমান্ড ছিল না — অন্য মডেলে আবার চেষ্টা #${n}` }));
         const script = [...reply.matchAll(/```(?:sh|bash|shell)?\n([\s\S]*?)```/g)].map(m => m[1]).join('\n');
-        if (!script.trim()) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।');
-        const log = execScript(script, 'agent'), failed = log.find(l => l.error);
+        const roundLog = execScript(script, 'agent'); log = [...log, ...roundLog];
+        const edits = roundLog.some(l => /^(write|append|replace|rm|mv|touch)\b/.test(l.cmd));
+        if ((edits && !roundLog.some(l => l.error)) || round === 3) break;
+        // Only read (or failed): feed the terminal output back so the agent continues, like a real session.
+        convo.push({ role: 'assistant', content: reply }, { role: 'user', content: 'টার্মিনাল আউটপুট:\n' + roundLog.map(l => `$ ${l.cmd}\n${l.output.slice(0, 6000)}`).join('\n').slice(0, 24000) + '\nএখন প্রয়োজনীয় পরিবর্তন write/replace দিয়ে করো, তারপর test ও build চালাও।' });
+        }
+        const failed = log.find(l => l.error);
         const after = getProject(id)?.files ?? {}, issues = testFiles(after);
         pushStep(commandStep('test', issues.length ? '✗ ' + issues.join('\n✗ ') : '✓ সব স্ট্যাটিক টেস্ট পাস', issues.length > 0)); pushStep(commandStep('build', bundleHtml(after) ? '✓ বিল্ড সফল' : '✗ বিল্ড হয়নি', !bundleHtml(after)));
         setTerm(t => [...t, { who: 'agent', cmd: 'test', output: issues.length ? '✗ ' + issues.join('\n✗ ') : '✓ সব স্ট্যাটিক টেস্ট পাস' }, { who: 'agent', cmd: 'build', output: bundleHtml(after) ? '✓ বিল্ড সফল — প্রিভিউ আপডেট' : '✗ বিল্ড হয়নি', error: !bundleHtml(after) }]);
