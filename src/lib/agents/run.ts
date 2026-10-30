@@ -1,4 +1,4 @@
-import { streamChat } from '@/lib/ai';
+import { streamChat, withFallback } from '@/lib/ai';
 import { applyOperations, contentHash, type FileMap } from '@/lib/project/files';
 import { bundleHtml, testFiles } from '@/lib/project/bundle';
 import { CODER_SYSTEM, PLANNER_SYSTEM, QUALITY_SYSTEM } from './prompts';
@@ -19,16 +19,21 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
   const shared = { chatMemory: extra.memory || undefined, imageLinks: [...(extra.images ?? []), ...(extra.assets ?? [])] };
   notify();
   try {
+    const retry = (who: string) => (n: number, e: unknown) => log(`${who}: উত্তর ব্যবহারযোগ্য হয়নি (${e instanceof Error ? e.message.slice(0, 80) : 'ত্রুটি'}) — অন্য মডেলে আবার চেষ্টা #${n}`);
+    const plan = await withFallback(async attempt => {
     let planText = '';
-    const planText2 = await streamChat({ role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images ?? [], format: 'json', signal, onToken: t => { planText += t; token(planText); } });
-    const plan = validatePlan(jsonReply(planText2));
+    const planText2 = await streamChat({ attempt, role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images ?? [], format: 'json', signal, onToken: t => { planText += t; token(planText); } });
+    return validatePlan(jsonReply(planText2));
+    }, signal, 4, retry('পরিকল্পনা এজেন্ট'));
     let candidate = { ...files };
     run = { ...run, state: 'running', summary: plan.summaryBn, tasks: plan.tasks.map(task => ({ ...task, state: 'queued' })) };
     log(`${plan.tasks.length}টি সাব-এজেন্ট তৈরি হয়েছে; একসাথে প্যারালালে চলবে।`);
     await executePlan(plan, signal, async task => {
       const context = ctxOf(candidate, [...new Set([...task.readPaths, ...task.writePaths])]);
-      const reply = await streamChat({ role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal, format: 'json', onToken: () => {} });
-      const result = outputSchema.parse(jsonReply(reply));
+      const result = await withFallback(async attempt => {
+      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal, format: 'json', onToken: () => {} });
+      return outputSchema.parse(jsonReply(reply));
+      }, signal, 4, retry(task.id));
       const ops = result.operations.filter(op => op.op !== 'delete').map(op => op.op === 'update' && candidate[op.path] === undefined ? { op: 'create' as const, path: op.path, content: op.content } : op.op === 'update' ? { ...op, expectedHash: contentHash(candidate[op.path] ?? '') } : op.op === 'create' && candidate[op.path] !== undefined ? { op: 'update' as const, path: op.path, expectedHash: contentHash(candidate[op.path] ?? ''), content: op.content } : op);
       candidate = applyOperations(candidate, ops, task.writePaths);
       log(`${task.id}: ${result.summaryBn}`);
@@ -38,8 +43,10 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
     for (let round = 1; round <= 2; round++) {
       run.state = 'reviewing'; run.summary = `মান যাচাই এজেন্ট (রাউন্ড ${round})`; notify();
       const problems = testFiles(candidate);
-      const reply = await streamChat({ role: 'quality', onProvider: provider('মান যাচাই এজেন্ট'), system: QUALITY_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, testProblems: problems, fileList: Object.keys(candidate), context: ctxOf(candidate, Object.keys(candidate), 50000) }) }], signal, format: 'json', onToken: () => {} });
-      const review = reviewSchema.parse(jsonReply(reply));
+      const review = await withFallback(async attempt => {
+      const reply = await streamChat({ attempt, role: 'quality', onProvider: provider('মান যাচাই এজেন্ট'), system: QUALITY_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, testProblems: problems, fileList: Object.keys(candidate), context: ctxOf(candidate, Object.keys(candidate), 50000) }) }], signal, format: 'json', onToken: () => {} });
+      return reviewSchema.parse(jsonReply(reply));
+      }, signal, 3, retry('মান যাচাই এজেন্ট'));
       log(`মান যাচাই: ${review.summaryBn}${review.issues.length ? ' — ' + review.issues.join('; ') : ''}`);
       const ops = review.operations.filter(op => op.op !== 'delete').map(op => candidate[op.path] === undefined ? { op: 'create' as const, path: op.path, content: 'content' in op ? op.content : '' } : { op: 'update' as const, path: op.path, expectedHash: contentHash(candidate[op.path] ?? ''), content: 'content' in op ? op.content : '' });
       if (ops.length) { candidate = applyOperations(candidate, ops); log(`মান যাচাই এজেন্ট ${ops.length}টি ফাইল ঠিক করেছে।`); }
