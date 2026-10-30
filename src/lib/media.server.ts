@@ -32,3 +32,21 @@ export async function generateImage(prompt: string, signal: AbortSignal): Promis
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return storeMedia(bytes, 'image/png', 'png');
 }
+
+/** Generates narration/voice audio with Lovable AI (Gemini TTS) and stores it as a WAV file. */
+export async function generateSpeech(text: string, signal: AbortSignal): Promise<string> {
+  const key = process.env['LOVABLE_API_KEY'];
+  if (!key) throw new Error('অডিও তৈরির AI সংযুক্ত নেই।');
+  const r = await fetch('https://ai.gateway.lovable.dev/v1/audio/speech', {
+    method: 'POST', signal,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: 'google/gemini-3.1-flash-tts-preview', contents: [{ role: 'user', parts: [{ text }] }], generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } }, stream_format: 'audio' }),
+  });
+  if (!r.ok) {
+    const msg = await r.text().catch(() => '');
+    throw Object.assign(new Error(r.status === 402 ? 'AI ক্রেডিট শেষ — অডিও তৈরি করা যায়নি।' : r.status === 429 ? 'অনেক অনুরোধ — একটু পরে চেষ্টা করুন।' : `অডিও তৈরি ব্যর্থ (${r.status}) ${msg.slice(0, 200)}`), { status: r.status });
+  }
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  if (bytes.length < 100) throw new Error('অডিও পাওয়া যায়নি।');
+  return storeMedia(bytes, r.headers.get('content-type')?.split(';')[0] || 'audio/wav', 'wav');
+}
