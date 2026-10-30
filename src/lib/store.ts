@@ -125,7 +125,7 @@ export function saveProjectFiles(id: string, files: FileMap, label: string, kind
   if (!p) throw new Error('প্রজেক্টটি পাওয়া যায়নি।');
   validateFiles(files);
   const revision = { id: uid(), createdAt: Date.now(), label, files: structuredClone(files) };
-  const updated = updateProject(id, { files, revisions: [...(p.revisions ?? []), revision].slice(-20), kind: kind ?? p.kind, html: files['index.html'] ?? p.html });
+  const updated = updateProject(id, { files, revisions: [...(p.revisions ?? []), revision].slice(-20), kind: kind ?? p.kind ?? 'html', html: files['index.html'] ?? '' });
   if (!updated) throw new Error('প্রজেক্ট সংরক্ষণ হয়নি।');
   return updated;
 }

@@ -11,3 +11,7 @@
 
 - NextBuild data lives in browser-storage JSON "files" via src/lib/store.ts (users.json, projects.json); no database — user asked for file-based storage without a backend.
 - All Ollama VPS calls go through server routes /api/ai/* (src/lib/ollama.server.ts) so the https app avoids mixed-content and the VPS URL stays in one place.
+- Keep the hosted studio on TanStack Start; generated Next.js projects require an external isolated runner because hosted server functions cannot spawn build processes.
+- Store source as a versioned file map with legacy HTML migration; validate file operations atomically and use revision hashes for conflict detection, not authentication.
+- Agent plans use validated dependency graphs and sequential scoped inference; source output is a candidate, never a compiler/test or deployment success signal.
+- Keep unavailable external runner/search/media/public-publish tools visibly blocked until configured; browser-local accounts and source do not authorize public services.
