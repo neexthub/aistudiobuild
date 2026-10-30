@@ -100,7 +100,7 @@ function Builder() {
         const script = [...reply.matchAll(/```(?:sh|bash|shell)?\n([\s\S]*?)```/g)].map(m => m[1]).join('\n');
         if (!script.trim()) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।');
         const log = execScript(script, 'agent'), failed = log.find(l => l.error);
-        const note = reply.split('```')[0].trim() || 'কমান্ড চালানো হয়েছে।';
+        const note = (reply.split('```')[0] ?? '').trim() || 'কমান্ড চালানো হয়েছে।';
         const updated = updateProject(id, { messages: [...(getProject(id)?.messages ?? []), { role: 'assistant', content: `${note}\n\n${log.length}টি কমান্ড চলেছে${failed ? ` — ত্রুটি: ${failed.output}` : ' ✓'}। টার্মিনাল ট্যাবে দেখুন।`, model: MODELS.fast }] }); if (updated) assign(updated);
       } else if (mode === 'agents') {
         const base = project.kind === 'html' && files['index.html'] ? files : {};
