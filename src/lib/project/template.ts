@@ -1,6 +1,8 @@
 import type { FileMap } from './files';
+import packageLock from '@/assets/next-template-lock.json';
 export function nextTemplate(): FileMap {
   return {
+    'package-lock.json': JSON.stringify(packageLock, null, 2),
     'package.json': JSON.stringify({ name: 'nextbuild-app', version: '1.0.0', private: true, scripts: { dev: 'next dev', build: 'next build', start: 'next start', typecheck: 'tsc --noEmit', test: 'node --test tests/*.test.mjs' }, dependencies: { next: '16.4.3', react: '19.2.0', 'react-dom': '19.2.0' }, devDependencies: { typescript: '5.8.3', '@types/node': '22.16.5', '@types/react': '19.2.0', '@types/react-dom': '19.2.0', tailwindcss: '4.2.1', '@tailwindcss/postcss': '4.2.1' } }, null, 2),
     'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ES2020', lib: ['dom', 'dom.iterable', 'esnext'], strict: true, noEmit: true, esModuleInterop: true, module: 'esnext', moduleResolution: 'bundler', resolveJsonModule: true, isolatedModules: true, jsx: 'react-jsx', plugins: [{ name: 'next' }], paths: { '@/*': ['./*'] } }, include: ['next-env.d.ts', '**/*.ts', '**/*.tsx', '.next/types/**/*.ts'], exclude: ['node_modules'] }, null, 2),
     'next-env.d.ts': '/// <reference types="next" />\n/// <reference types="next/image-types/global" />\n',
