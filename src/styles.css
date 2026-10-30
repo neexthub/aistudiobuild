@@ -89,3 +89,11 @@
 .hljs-comment { color: var(--muted-foreground); font-style: italic; }
 .hljs-number, .hljs-literal { color: var(--accent); }
 .hljs-attribute, .hljs-property { color: oklch(0.8 0.12 200); }
+
+/* Studio source editor overlay uses the same metrics in both layers. */
+.source-editor { --source-text: transparent; }
+.source-input { color: var(--source-text); caret-color: var(--foreground); }
+.source-input::selection { color: var(--foreground); background: var(--secondary); }
+.studio-shell * { min-width: 0; letter-spacing: 0; }
+.studio-empty-mark { background: var(--glass); }
+@media (prefers-reduced-motion: reduce) { .studio-shell * { animation: none !important; scroll-behavior: auto !important; } }
