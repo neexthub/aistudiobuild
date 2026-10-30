@@ -90,26 +90,26 @@ export async function openStream(role: AgentRole, messages: Msg[], json: boolean
 /** Converts OpenAI SSE into NDJSON lines {message:{content}} for the browser. */
 export function sseToNdjson(body: ReadableStream<Uint8Array>, label: string): ReadableStream<Uint8Array> {
   const reader = body.getReader(), dec = new TextDecoder(), enc = new TextEncoder();
-  let buf = '', sent = false;
+  let buf = '', sent = false, finished = false;
   return new ReadableStream({
     async pull(c) {
       if (!sent) { sent = true; c.enqueue(enc.encode(JSON.stringify({ provider: label }) + '\n')); return; }
       try {
         for (;;) {
         const { done, value } = await reader.read();
-        if (done) { c.close(); return; }
+        if (done) { if (!finished) c.enqueue(enc.encode(JSON.stringify({ error: 'মডেলের উত্তর অসম্পূর্ণ অবস্থায় থেমে গেছে' }) + '\n')); c.close(); return; }
         buf += dec.decode(value, { stream: true });
         const lines = buf.split('\n'); buf = lines.pop() ?? '';
         let out = '';
         for (const line of lines) {
           const t = line.trim(); if (!t.startsWith('data:')) continue;
-          const d = t.slice(5).trim(); if (d === '[DONE]') continue;
-          try { const j = JSON.parse(d); const tok = j.choices?.[0]?.delta?.content; if (tok) out += JSON.stringify({ message: { content: tok } }) + '\n'; } catch { /* partial */ }
+          const d = t.slice(5).trim(); if (d === '[DONE]') { finished = true; continue; }
+          try { const j = JSON.parse(d); if (j.choices?.[0]?.finish_reason) finished = true; const tok = j.choices?.[0]?.delta?.content; if (tok) out += JSON.stringify({ message: { content: tok } }) + '\n'; } catch { /* partial */ }
         }
         // Keep reading until there is something to send: a pull that enqueues nothing stalls the stream.
         if (out) { c.enqueue(enc.encode(out)); return; }
         }
-      } catch { try { c.close(); } catch { /* closed */ } }
+      } catch { try { c.enqueue(enc.encode(JSON.stringify({ error: 'মডেলের সংযোগ মাঝপথে বিচ্ছিন্ন' }) + '\n')); c.close(); } catch { /* closed */ } }
     },
     cancel() { reader.cancel().catch(() => {}); },
   });
