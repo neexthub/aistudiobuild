@@ -19,6 +19,7 @@ export const LOVABLE_PROVIDER: Provider = {
 };
 
 export const PROVIDERS: Provider[] = [
+  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', keyUrl: 'https://platform.openai.com/api-keys', keyHow: 'platform.openai.com/api-keys — Create new secret key (কার্ড/ব্যালেন্স লাগে)।', note: 'GPT-5.5, প্ৰিয়ম', models: { planner: 'gpt-5.5', coder: 'gpt-5.5', quality: 'gpt-5.4-mini', fast: 'gpt-5.4-nano' } },
   { id: 'groq', name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', keyUrl: 'https://console.groq.com/keys', keyHow: 'console.groq.com/keys — সাইন ইন করে Create API key চাপুন।', note: 'সবচেয়ে দ্রুত, ফ্রি', models: { planner: 'openai/gpt-oss-120b', coder: 'openai/gpt-oss-120b', quality: 'qwen/qwen3.8-27b', fast: 'openai/gpt-oss-20b' } },
   { id: 'gemini', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', keyUrl: 'https://aistudio.google.com/apikey', keyHow: 'aistudio.google.com/apikey — Create API key চাপুন।', note: 'বড় context, ফ্রি', models: { planner: 'gemini-3.5-flash', coder: 'gemini-3.5-flash', quality: 'gemini-3.5-flash', fast: 'gemini-3.1-flash-lite' } },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyUrl: 'https://openrouter.ai/keys', keyHow: 'openrouter.ai/keys — Create Key চাপুন; :free মডেল ব্যবহার করুন।', note: ':free মডেল', models: { planner: 'nvidia/nemotron-3-ultra-550b-a55b:free', coder: 'poolside/laguna-s-2.1:free', quality: 'nvidia/nemotron-3-ultra-550b-a55b:free', fast: 'cohere/north-mini-code:free' } },

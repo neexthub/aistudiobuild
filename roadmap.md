@@ -20,3 +20,7 @@
 - [x] Settings: show Lovable AI usage/limit status
 - [x] Lovable AI first; on limit → auto switch; after all fail → one more full round; then tell user "no balance on any API"
 - [x] Files appear live in file manager while AI writes; preview opens after run
+## Lovable API + OpenAI (Oct 31)
+- [x] Settings: add your own Lovable AI key (with how-to-get steps); runs right after the built-in key
+- [ ] OpenAI models added: own-key provider + OpenAI models through Lovable AI; live-verify each
+- [ ] Live browser check: settings dropdown, Lovable help box, live key status, one full build
