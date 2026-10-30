@@ -45,7 +45,7 @@ function Home() {
       </header>
       <main className="mx-auto grid max-w-6xl gap-12 px-5 py-10 lg:grid-cols-2 lg:py-20">
         <section className="space-y-6">
-          <span className="inline-block rounded-full border border-primary/30 px-3 py-1 text-xs text-primary">দুইটি AI মডেল · নিজস্ব সার্ভার</span>
+          <span className="inline-block rounded-full border border-primary/30 px-3 py-1 text-xs text-primary">Lovable AI + ফ্রি মডেল · অটো ফেইলওভার</span>
           <h1 className="font-display text-4xl font-bold leading-tight md:text-6xl">
             কথা বলুন,<br /><span className="text-primary">অ্যাপ তৈরি</span> হয়ে যাবে।
           </h1>
