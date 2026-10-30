@@ -106,13 +106,15 @@ function Builder() {
     } catch (e) { setError((e as Error).message); }
     finally { setUploading(false); if (fileInput.current) fileInput.current.value = ''; }
   };
-  const makeImage = async () => {
+  const makeImage = async (kind: 'image' | 'icon' | 'audio' = 'image') => {
     const prompt = input.trim(); if (!prompt || imaging || busy) return;
     setImaging(true); setError('');
     try {
-      const url = await generateImage(prompt);
+      const url = await generateImage(prompt, undefined, kind);
       const p0 = getProject(id); if (!p0) return;
-      const updated = updateProject(id, { assets: [...(p0.assets ?? []), url].slice(-20), messages: [...p0.messages, { role: 'user', content: '🎨 ছবি বানাও: ' + prompt }, { role: 'assistant', content: 'ছবি তৈরি হয়েছে! এটি প্রজেক্টে সংরক্ষিত — পরের অনুরোধে এজেন্ট এটি অ্যাপে ব্যবহার করতে পারবে।', model: 'Lovable AI · ছবি', images: [url] }] });
+      const label = kind === 'audio' ? '🔊 অডিও বানাও: ' : kind === 'icon' ? '✨ আইকন বানাও: ' : '🎨 ছবি বানাও: ';
+      const reply: ChatMsg = kind === 'audio' ? { role: 'assistant', content: 'অডিও তৈরি হয়েছে! প্রজেক্টে সংরক্ষিত — পরের অনুরোধে এজেন্ট এটি অ্যাপে ব্যবহার করতে পারবে।', model: 'Lovable AI · অডিও', audio: url } : { role: 'assistant', content: `${kind === 'icon' ? 'আইকন' : 'ছবি'} তৈরি হয়েছে! এটি প্রজেক্টে সংরক্ষিত — পরের অনুরোধে এজেন্ট এটি অ্যাপে ব্যবহার করতে পারবে।`, model: `Lovable AI · ${kind === 'icon' ? 'আইকন' : 'ছবি'}`, images: [url] };
+      const updated = updateProject(id, { assets: [...(p0.assets ?? []), (kind === 'audio' ? 'audio: ' : kind === 'icon' ? 'icon: ' : '') + url].slice(-20), messages: [...p0.messages, { role: 'user', content: label + prompt }, reply] });
       if (updated) assign(updated); setInput('');
     } catch (e) { setError((e as Error).message); }
     finally { setImaging(false); }
@@ -137,9 +139,9 @@ function Builder() {
       const userMsg: ChatMsg = { role: 'user', content: goal + (att.texts.length ? `\n📎 ${att.texts.map(t => t.name).join(', ')}` : ''), ...(imgs.length ? { images: imgs } : {}) };
       const p = updateProject(id, { messages: [...(latest.current?.messages ?? []), userMsg] }); if (p) assign(p);
       setInput(''); setAttach({ images: [], texts: [] }); { const u = updateProject(id, { suggestions: [] }); if (u) assign(u); }
-      const hasApp = !!files['index.html'];
+      const hasApp = !!bundleHtml(files);
       if (mode === 'agents' && hasApp) {
-        setView('terminal'); setPanel('workspace');
+        setView('preview');
         const list = Object.entries(files).map(([p, c]) => `--- ${p}\n${c.slice(0, 14000)}`).join('\n').slice(0, 40000);
         let full = '';
         const convo: ChatMsg[] = [{ role: 'user', content: `অনুরোধ: ${fullGoal}\n${memory ? 'চ্যাট মেমরি:\n' + memory + '\n' : ''}${[...imgs, ...assets].length ? 'imageLinks:\n' + [...imgs, ...assets].join('\n') + '\n' : ''}বর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }];
@@ -162,13 +164,13 @@ function Builder() {
         const updated = updateProject(id, { messages: [...(getProject(id)?.messages ?? []), { role: 'assistant', content: `${note}\n\n\`\`\`sh\n${mini}\n\`\`\`\n${log.length}টি কমান্ড চলেছে${failed ? ` — ত্রুটি: ${failed.output}` : ' ✓'}${issues.length ? ` · ${issues.length}টি টেস্ট সমস্যা` : ' · টেস্ট ও বিল্ড পাস'}।`, model: 'কমান্ড এজেন্ট', steps: stepsRef.current }] }); if (updated) assign(updated);
         setView('preview'); void suggestNext(goal);
       } else if (mode === 'agents') {
-        setView('terminal'); setPanel('workspace');
-        const base = project.kind === 'html' && files['index.html'] ? files : {};
+        setView('preview');
+        const base: typeof files = {};
         const { files: generated } = await buildWithAgents(fullGoal, base, abort.signal, persistRun, value => setStreaming(value), { images: imgs, memory, assets });
-        const result = saveProjectFiles(id, generated, 'এজেন্ট আপডেট', 'html');
+        const result = saveProjectFiles(id, generated, 'এজেন্ট আপডেট', 'next');
         setTerm(t => [...t, ...fileChanges(base, generated).map(c => ({ who: 'agent' as const, cmd: `${c.kind === 'deleted' ? 'rm' : 'write'} ${c.path}`, output: c.kind === 'added' ? '+ নতুন ফাইল' : c.kind === 'deleted' ? '− মুছে ফেলা' : '~ পরিবর্তিত' })), { who: 'agent', cmd: 'build', output: '✓ বিল্ড ও টেস্ট শেষ' }]);
         const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: `কাজ শেষ! ${Object.keys(generated).length}টি ফাইল তৈরি, মান যাচাই ও টেস্ট হয়েছে। প্রিভিউ দেখুন, তারপর পাবলিশ করুন।`, model: MODELS.fast, steps: [...runViewRef.current, ...fileChanges(base, generated).map(c => commandStep(c.kind === 'deleted' ? 'rm ' + c.path : 'write ' + c.path, c.kind))] }] }); if (updated) assign(updated);
-        setSelected('index.html'); setDraft(generated['index.html'] ?? ''); setTabs(['index.html']); setView('preview'); void suggestNext(goal);
+        { const main = ['app/page.tsx', 'src/app/page.tsx', 'index.html'].find(f => generated[f] !== undefined) ?? Object.keys(generated)[0] ?? ''; setSelected(main); setDraft(generated[main] ?? ''); setTabs(main ? [main] : []); } setView('preview'); setFrameKey(k => k + 1); void suggestNext(goal);
       } else {
         let full = '';
         const reply = await withFallback(async attempt => { full = ''; const r = await streamChat({ attempt, role: 'coder', system: SYSTEM_PROMPT, messages: [{ role: 'user', content: fullGoal + (memory ? '\nচ্যাট মেমরি:\n' + memory : '') + ([...imgs, ...assets].length ? '\nব্যবহারযোগ্য ছবির লিংক:\n' + [...imgs, ...assets].join('\n') : '') + (files['index.html'] ? '\nCurrent HTML:\n' + files['index.html'].slice(0, 6500) : '') }], images: imgs, signal: abort.signal, onToken: token => { full += token; setStreaming(full); } }); if (!extractHtml(r)) throw new Error('সম্পূর্ণ HTML পাওয়া যায়নি'); return r; }, abort.signal, 3, n => setStreaming(`অন্য মডেলে আবার চেষ্টা #${n}…`));
@@ -180,7 +182,7 @@ function Builder() {
     } catch (e) { setError(abort.signal.aborted ? 'কাজ বন্ধ করা হয়েছে; source অপরিবর্তিত আছে।' : (e as Error).message); }
     finally { setBusy(false); setStreaming(''); ctrl.current = null; }
   };
-  const html = project.kind === 'html' ? bundleHtml(files) ?? project.html ?? '' : '';
+  const html = bundleHtml(files) ?? project.html ?? '';
   const publish = async () => {
     if (!html) return; setPublishing(true); setError('');
     try {
@@ -207,7 +209,7 @@ function Builder() {
         <div className="flex h-11 shrink-0 items-center gap-2 border-b px-4 text-xs"><Bot className="h-4 w-4 text-primary" /><span className="font-semibold">NextBuild Agent</span><span className="ml-auto text-muted-foreground">অটো মাল্টি-মডেল</span></div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {!project.messages.length && <div className="py-8"><Sparkles className="mb-4 h-7 w-7 text-primary" /><h1 className="mb-2 text-xl font-semibold">কী তৈরি করতে চান?</h1><p className="text-sm text-muted-foreground">আপনার অ্যাপের অনুরোধ লিখুন।</p><div className="mt-5 flex flex-col items-start gap-2">{['একটি inventory app বানাও', 'বাংলা portfolio website বানাও', 'একটি task manager বানাও'].map(text => <Button key={text} variant="outline" size="sm" onClick={() => setInput(text)}>{text}</Button>)}</div></div>}
-          {project.messages.map((m, i) => <div key={i} className={m.role === 'user' ? 'ml-5 rounded-md bg-secondary px-3 py-2 text-sm whitespace-pre-wrap break-words' : 'min-w-0 space-y-1'}>{m.role === 'assistant' && <p className="text-[10px] text-primary">NextBuild · {m.model ?? 'Agent'}</p>}{m.role === 'assistant' && m.steps?.length ? <WorkSteps steps={m.steps} open={false} /> : null}{m.role === 'user' ? m.content : <RichText text={m.content} />}{m.images?.length ? <div className="mt-2 flex flex-wrap gap-2">{m.images.map(u => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="সংযুক্ত ছবি" className="h-24 w-24 rounded-md border object-cover" /></a>)}</div> : null}</div>)}
+          {project.messages.map((m, i) => <div key={i} className={m.role === 'user' ? 'ml-5 rounded-md bg-secondary px-3 py-2 text-sm whitespace-pre-wrap break-words' : 'min-w-0 space-y-1'}>{m.role === 'assistant' && <p className="text-[10px] text-primary">NextBuild · {m.model ?? 'Agent'}</p>}{m.role === 'assistant' && m.steps?.length ? <WorkSteps steps={m.steps} open={false} /> : null}{m.role === 'user' ? m.content : <RichText text={m.content} />}{m.images?.length ? <div className="mt-2 flex flex-wrap gap-2">{m.images.map(u => <a key={u} href={u} target="_blank" rel="noreferrer"><img src={u} alt="সংযুক্ত ছবি" className="h-24 w-24 rounded-md border object-cover" /></a>)}</div> : null}{m.audio ? <audio controls src={m.audio} className="mt-2 w-full" /> : null}</div>)}
           {!busy && !!project.suggestions?.length && <div className="space-y-1"><p className="flex items-center gap-1 text-[10px] text-muted-foreground"><Lightbulb className="h-3 w-3" />পরের ধাপের সাজেশন</p><div className="flex flex-wrap gap-1">{project.suggestions.map(sg => <Button key={sg} variant="outline" size="sm" className="h-auto whitespace-normal py-1 text-left text-xs" onClick={() => setInput(sg)}>{sg}</Button>)}</div></div>}
           {busy && <WorkSteps steps={[...runView, ...cmdSteps, ...(liveRun?.state === 'planning' || (!runView.length && !cmdSteps.length) ? [] : [])]} />}
           {busy && <p className="flex items-center gap-2 text-xs text-primary"><Loader2 className="h-3 w-3 animate-spin" />{liveRun?.state === 'planning' ? 'পরিকল্পনা তৈরি হচ্ছে…' : 'এজেন্ট কাজ করছে…'}</p>}
@@ -218,7 +220,7 @@ function Builder() {
           <select aria-label="এজেন্ট মোড" value={mode} disabled={busy} onChange={e => setMode(e.target.value as 'agents' | 'html')} className="h-8 w-full rounded-md border bg-card px-2 text-xs"><option value="agents">পূর্ণ মোড: পরিকল্পনা → প্যারালাল এজেন্ট → টার্মিনাল → মান যাচাই → টেস্ট → বিল্ড</option><option value="html">দ্রুত HTML মোড</option></select>
           {(attach.images.length > 0 || attach.texts.length > 0 || uploading) && <div className="flex flex-wrap items-center gap-2">{attach.images.map(u => <div key={u} className="relative"><img src={u} alt="সংযুক্ত ছবি" className="h-12 w-12 rounded-md border object-cover" /><button type="button" aria-label="ছবি সরান" className="absolute -right-1 -top-1 rounded-full bg-destructive p-0.5 text-destructive-foreground" onClick={() => setAttach(a => ({ ...a, images: a.images.filter(x => x !== u) }))}><X className="h-3 w-3" /></button></div>)}{attach.texts.map(t => <span key={t.name} className="flex items-center gap-1 rounded-md border bg-card px-2 py-1 text-[10px]"><FileCode2 className="h-3 w-3" />{t.name}<button type="button" aria-label={`${t.name} সরান`} onClick={() => setAttach(a => ({ ...a, texts: a.texts.filter(x => x.name !== t.name) }))}><X className="h-3 w-3" /></button></span>)}{uploading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}</div>}
           <PromptSuggestions value={input} busy={busy} enabled={suggestions} setEnabled={setSuggestions} accept={setInput} />
-          <div className="flex items-end gap-2 rounded-md border bg-card p-2"><textarea aria-label="অ্যাপের অনুরোধ" rows={3} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder="আপনার অ্যাপের অনুরোধ লিখুন…" className="min-w-0 flex-1 resize-none bg-transparent text-sm outline-none" /><div className="flex flex-col gap-1"><input ref={fileInput} type="file" multiple hidden accept="image/*,.txt,.md,.json,.csv,.html,.htm,.css,.js,.jsx,.ts,.tsx,.xml,.yml,.yaml,.svg" onChange={e => void addFiles(e.target.files)} /><Button variant="ghost" size="icon" aria-label="ছবি বা ফাইল যোগ করুন" title="ছবি বা ফাইল যোগ করুন" disabled={busy || uploading} onClick={() => fileInput.current?.click()}><Paperclip /></Button><Button variant="ghost" size="icon" aria-label="AI দিয়ে ছবি বানান" title="লেখা বর্ণনা থেকে AI ছবি বানান" disabled={busy || imaging || !input.trim()} onClick={() => void makeImage()}>{imaging ? <Loader2 className="animate-spin" /> : <ImagePlus />}</Button></div>{busy ? <Button variant="destructive" size="icon" aria-label="থামান" onClick={() => ctrl.current?.abort()}><Square /></Button> : <Button size="icon" aria-label="পাঠান" disabled={!input.trim()} onClick={() => void send()}><Send /></Button>}</div>
+          <div className="flex items-end gap-2 rounded-md border bg-card p-2"><textarea aria-label="অ্যাপের অনুরোধ" rows={3} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder="আপনার অ্যাপের অনুরোধ লিখুন…" className="min-w-0 flex-1 resize-none bg-transparent text-sm outline-none" /><div className="flex flex-col gap-1"><input ref={fileInput} type="file" multiple hidden accept="image/*,.txt,.md,.json,.csv,.html,.htm,.css,.js,.jsx,.ts,.tsx,.xml,.yml,.yaml,.svg" onChange={e => void addFiles(e.target.files)} /><Button variant="ghost" size="icon" aria-label="ছবি বা ফাইল যোগ করুন" title="ছবি বা ফাইল যোগ করুন" disabled={busy || uploading} onClick={() => fileInput.current?.click()}><Paperclip /></Button><Button variant="ghost" size="icon" aria-label="AI দিয়ে ছবি বানান" title="লেখা বর্ণনা থেকে AI ছবি বানান" disabled={busy || imaging || !input.trim()} onClick={() => void makeImage()}>{imaging ? <Loader2 className="animate-spin" /> : <ImagePlus />}</Button><Button variant="ghost" size="icon" aria-label="AI দিয়ে আইকন বানান" title="লেখা বর্ণনা থেকে AI আইকন বানান" disabled={busy || imaging || !input.trim()} onClick={() => void makeImage('icon')}><Sparkles /></Button><Button variant="ghost" size="icon" aria-label="AI দিয়ে অডিও বানান" title="লেখা থেকে AI কণ্ঠ/অডিও বানান" disabled={busy || imaging || !input.trim()} onClick={() => void makeImage('audio')}><Volume2 /></Button></div>{busy ? <Button variant="destructive" size="icon" aria-label="থামান" onClick={() => ctrl.current?.abort()}><Square /></Button> : <Button size="icon" aria-label="পাঠান" disabled={!input.trim()} onClick={() => void send()}><Send /></Button>}</div>
         </div>
       </aside>
       <main className={`${panel === 'workspace' ? 'flex' : 'hidden'} min-w-0 flex-1 flex-col lg:flex`}>
