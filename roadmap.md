@@ -27,3 +27,4 @@
 - [ ] One full multi-file build re-run after the router's new built-in OpenAI candidate
 - [x] Inline ghost-text next-words suggestion in chat input (click/Tab to accept)
 - [x] AI browser auto-checks desktop + mobile after every build (overflow/errors) and auto-fixes
+- [x] Bengali mic voice typing + AI speaks step/summary in Bengali
