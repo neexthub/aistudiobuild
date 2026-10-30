@@ -2,7 +2,7 @@ import { streamChat, withFallback } from '@/lib/ai';
 import { applyOperations, contentHash, type FileMap } from '@/lib/project/files';
 import { bundleHtml, testFiles } from '@/lib/project/bundle';
 import { CODER_SYSTEM, PLANNER_SYSTEM, QUALITY_SYSTEM } from './prompts';
-import { executePlan, jsonReply, outputSchema, reviewSchema, validatePlan, type RunRecord } from './contracts';
+import { executePlan, jsonReply, parseFileBlocks, reviewSchema, validatePlan, type RunRecord } from './contracts';
 
 const ctxOf = (files: FileMap, paths: string[], cap = 40000) => {
   const out: { path: string; hash: string; content: string }[] = []; let size = 0;
@@ -31,10 +31,13 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
     await executePlan(plan, signal, async task => {
       const context = ctxOf(candidate, [...new Set([...task.readPaths, ...task.writePaths])]);
       const result = await withFallback(async attempt => {
-      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal, format: 'json', onToken: () => {} });
-      return outputSchema.parse(jsonReply(reply));
+      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal, onToken: () => {} });
+      const parsed = parseFileBlocks(reply);
+      const mine = parsed.files.filter(f => task.writePaths.includes(f.path));
+      if (!mine.length) throw new Error('নির্ধারিত ফাইল পাওয়া যায়নি');
+      return { ...parsed, files: mine };
       }, signal, 4, retry(task.id));
-      const ops = result.operations.filter(op => op.op !== 'delete').map(op => op.op === 'update' && candidate[op.path] === undefined ? { op: 'create' as const, path: op.path, content: op.content } : op.op === 'update' ? { ...op, expectedHash: contentHash(candidate[op.path] ?? '') } : op.op === 'create' && candidate[op.path] !== undefined ? { op: 'update' as const, path: op.path, expectedHash: contentHash(candidate[op.path] ?? ''), content: op.content } : op);
+      const ops = result.files.map(f => candidate[f.path] === undefined ? { op: 'create' as const, path: f.path, content: f.content } : { op: 'update' as const, path: f.path, expectedHash: contentHash(candidate[f.path] ?? ''), content: f.content });
       candidate = applyOperations(candidate, ops, task.writePaths);
       log(`${task.id}: ${result.summaryBn}`);
     }, (id, state) => { run.tasks = run.tasks.map(task => task.id === id ? { ...task, state } : task); notify(); });

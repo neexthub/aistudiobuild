@@ -63,3 +63,11 @@ export async function executePlan(plan: AgentPlan, signal: AbortSignal, execute:
 export function jsonReply(text: string): unknown {
   return JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
 }
+
+/** Parses <<<FILE path>>> … <<<END>>> blocks (robust for large files, no JSON escaping). */
+export function parseFileBlocks(text: string): { summaryBn: string; files: { path: string; content: string }[] } {
+  const files: { path: string; content: string }[] = [];
+  const re = /<<<FILE\s+([^>\s]+)\s*>>>\r?\n([\s\S]*?)(?:\r?\n)?<<<END>>>/g;
+  for (const m of text.matchAll(re)) { const path = m[1]!.trim(); if (validPath(path)) files.push({ path, content: m[2]!.replace(/^```\w*\n/, '').replace(/\n```\s*$/, '') }); }
+  return { summaryBn: (text.match(/SUMMARY:\s*(.+)/)?.[1] ?? 'ফাইল লেখা হয়েছে').trim().slice(0, 300), files };
+}
