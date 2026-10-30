@@ -22,7 +22,16 @@ export type Database = {
           fail_count: number
           id: string
           label: string
+          last_checked_at: string | null
+          last_error: string | null
+          last_model: string | null
+          last_status: number | null
+          last_used_at: string | null
           provider: string
+          rate_limit: number | null
+          rate_remaining: number | null
+          rate_reset: string | null
+          token_remaining: number | null
           use_count: number
         }
         Insert: {
@@ -32,7 +41,16 @@ export type Database = {
           fail_count?: number
           id?: string
           label?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_model?: string | null
+          last_status?: number | null
+          last_used_at?: string | null
           provider: string
+          rate_limit?: number | null
+          rate_remaining?: number | null
+          rate_reset?: string | null
+          token_remaining?: number | null
           use_count?: number
         }
         Update: {
@@ -42,7 +60,16 @@ export type Database = {
           fail_count?: number
           id?: string
           label?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          last_model?: string | null
+          last_status?: number | null
+          last_used_at?: string | null
           provider?: string
+          rate_limit?: number | null
+          rate_remaining?: number | null
+          rate_reset?: string | null
+          token_remaining?: number | null
           use_count?: number
         }
         Relationships: []
