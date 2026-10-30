@@ -41,7 +41,7 @@ function Builder() {
   const [input, setInput] = useState(''), [modeSel, setMode] = useState<'agents' | 'html'>('agents'); const mode = modeSel;
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [streaming, setStreaming] = useState('');
   const [browserRun, setBrowserRun] = useState(0), autoFixes = useRef(0), sendRef = useRef<((r?: { goal: string; mode: 'agents' | 'html'; fix?: boolean }) => Promise<void>) | null>(null), resumed = useRef(false), [resumeNote, setResumeNote] = useState('');
-  const [view, setView] = useState<View>('preview'), viewRef = useRef<View>('preview'); viewRef.current = view; const selRef = useRef('');  [panel, setPanel] = useState<'chat' | 'workspace'>('chat');
+  const [view, setView] = useState<View>('preview'), viewRef = useRef<View>('preview'); viewRef.current = view; const selRef = useRef(''); const [panel, setPanel] = useState<'chat' | 'workspace'>('chat');
   const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop'), [frameKey, setFrameKey] = useState(0);
   const [selected, setSelected] = useState(''), [tabs, setTabs] = useState<string[]>([]), [draft, setDraft] = useState('');
   const [filter, setFilter] = useState(''), [suggestions, setSuggestions] = useState(false), [liveRun, setLiveRun] = useState<RunRecord | null>(null);
