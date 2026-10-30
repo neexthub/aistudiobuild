@@ -1,5 +1,7 @@
 // File-based JSON store. Each "file" (users.json, projects.json) is a JSON
 // document kept in browser storage, read and written whole like a file.
+import { applyOperations, contentHash, legacyFiles, validateFiles, type FileMap, type FileOperation, type Revision } from './project/files';
+import type { RunRecord } from './agents/contracts';
 export type User = { id: string; name: string; email: string; pass: string; createdAt: number };
 export type ChatMsg = { role: "user" | "assistant"; content: string; model?: string };
 export type Project = {
@@ -13,6 +15,11 @@ export type Project = {
   publishedHtml?: string;
   createdAt: number;
   updatedAt: number;
+  schemaVersion?: 2;
+  files?: FileMap;
+  revisions?: Revision[];
+  runs?: RunRecord[];
+  kind?: 'html' | 'next';
 };
 
 type Files = { "users.json": User[]; "projects.json": Project[]; "session.json": { userId: string | null } };
@@ -67,9 +74,12 @@ export function currentUser(): User | null {
 
 // ---- projects ----
 export function listProjects(ownerId: string) {
-  return readFile("projects.json").filter((p) => p.ownerId === ownerId).sort((a, b) => b.updatedAt - a.updatedAt);
+  return readFile("projects.json").filter((p) => p.ownerId === ownerId).map(migrateProject).sort((a, b) => b.updatedAt - a.updatedAt);
 }
-export function getProject(id: string) { return readFile("projects.json").find((p) => p.id === id) ?? null; }
+export function migrateProject(project: Project): Project {
+  return { ...project, schemaVersion: 2, files: project.files ?? legacyFiles(project.html), revisions: project.revisions ?? [], runs: project.runs ?? [], kind: project.kind ?? 'html' };
+}
+export function getProject(id: string) { const p = readFile("projects.json").find((p) => p.id === id); return p ? migrateProject(p) : null; }
 export function getPublished(slug: string) {
   return readFile("projects.json").find((p) => p.slug === slug && p.published) ?? null;
 }
@@ -82,7 +92,7 @@ function uniqueSlug(name: string, exceptId?: string) {
 }
 export function createProject(ownerId: string, name: string): Project {
   const now = Date.now();
-  const p: Project = { id: uid(), ownerId, name: name.trim() || "নতুন অ্যাপ", slug: uniqueSlug(name), html: "", messages: [], published: false, createdAt: now, updatedAt: now };
+  const p: Project = { id: uid(), ownerId, name: name.trim() || "নতুন অ্যাপ", slug: uniqueSlug(name), html: "", messages: [], published: false, createdAt: now, updatedAt: now, schemaVersion: 2, files: {}, revisions: [], runs: [], kind: 'html' };
   writeFile("projects.json", [...readFile("projects.json"), p]);
   return p;
 }
@@ -90,7 +100,10 @@ export function updateProject(id: string, patch: Partial<Omit<Project, "id" | "o
   const all = readFile("projects.json");
   const i = all.findIndex((p) => p.id === id);
   if (i < 0) return null;
-  const next = { ...all[i]!, ...patch, updatedAt: Date.now() } as Project;
+  const existing = all[i];
+  if (!existing) return null;
+  const next = { ...migrateProject(existing), ...patch, updatedAt: Date.now() };
+  if (patch.html !== undefined && !patch.files && next.kind === 'html') next.files = legacyFiles(patch.html);
   if (patch.name) next.slug = uniqueSlug(patch.name, id);
   all[i] = next;
   writeFile("projects.json", all);
@@ -102,5 +115,29 @@ export function deleteProject(id: string) {
 export function publishProject(id: string) {
   const p = getProject(id);
   if (!p || !p.html) throw new Error("আগে অ্যাপ বানান, তারপর পাবলিশ করুন");
-  return updateProject(id, { published: true, publishedHtml: p.html })!;
+  const updated = updateProject(id, { published: true, publishedHtml: p.html });
+  if (!updated) throw new Error('প্রজেক্টটি পাওয়া যায়নি।');
+  return updated;
 }
+
+export function saveProjectFiles(id: string, files: FileMap, label: string, kind?: 'html' | 'next') {
+  const p = getProject(id);
+  if (!p) throw new Error('প্রজেক্টটি পাওয়া যায়নি।');
+  validateFiles(files);
+  const revision = { id: uid(), createdAt: Date.now(), label, files: structuredClone(files) };
+  const updated = updateProject(id, { files, revisions: [...(p.revisions ?? []), revision].slice(-20), kind: kind ?? p.kind ?? 'html', html: files['index.html'] ?? '' });
+  if (!updated) throw new Error('প্রজেক্ট সংরক্ষণ হয়নি।');
+  return updated;
+}
+export function editProjectFiles(id: string, operations: FileOperation[]) {
+  const p = getProject(id);
+  if (!p) throw new Error('প্রজেক্টটি পাওয়া যায়নি।');
+  return saveProjectFiles(id, applyOperations(p.files ?? {}, operations), 'ফাইল পরিবর্তন');
+}
+export function restoreRevision(id: string, revisionId: string) {
+  const p = getProject(id);
+  const revision = p?.revisions?.find(r => r.id === revisionId);
+  if (!revision) throw new Error('সংস্করণ পাওয়া যায়নি।');
+  return saveProjectFiles(id, revision.files, 'ফিরিয়ে আনা: ' + revision.label);
+}
+export { contentHash };

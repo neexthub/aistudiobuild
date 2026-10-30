@@ -3,8 +3,8 @@
 import type { ChatMsg } from "./store";
 
 export const MODELS = {
-  fast: "qwen2.5-coder:7b",
-  reason: "deepseek-coder-v2:latest",
+  fast: "qwen2.5-coder:14b",
+  reason: "qwen2.5:14b",
 } as const;
 
 export const SYSTEM_PROMPT = `তুমি NextBuild এর AI এজেন্ট। সবসময় বাংলায় কথা বলবে।
@@ -43,9 +43,12 @@ export async function streamChat(opts: {
   onToken: (t: string) => void;
   signal?: AbortSignal;
   idleMs?: number;
+  format?: 'json';
 }): Promise<string> {
   const ctrl = new AbortController();
-  opts.signal?.addEventListener("abort", () => ctrl.abort());
+  const onAbort = () => ctrl.abort();
+  if (opts.signal?.aborted) ctrl.abort();
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
   let idle: ReturnType<typeof setTimeout> | undefined;
   const bump = () => {
     clearTimeout(idle);
@@ -59,6 +62,7 @@ export async function streamChat(opts: {
       signal: ctrl.signal,
       body: JSON.stringify({
         model: opts.model,
+        format: opts.format,
         messages: [{ role: "system", content: opts.system }, ...opts.messages.map(({ role, content }) => ({ role, content }))],
       }),
     });
@@ -66,6 +70,13 @@ export async function streamChat(opts: {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = "", full = "";
+    const consume = (line: string) => {
+      if (!line.trim()) return;
+      const j = JSON.parse(line);
+      if (j.error) throw new Error(j.error);
+      const t = j.message?.content ?? '';
+      if (t) { full += t; opts.onToken(t); }
+    };
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -75,18 +86,14 @@ export async function streamChat(opts: {
       buf = lines.pop() ?? "";
       for (const line of lines) {
         if (!line.trim()) continue;
-        try {
-          const j = JSON.parse(line);
-          if (j.error) throw new Error(j.error);
-          const t = j.message?.content ?? "";
-          if (t) { full += t; opts.onToken(t); }
-        } catch (e) {
-          if (e instanceof Error && !(e instanceof SyntaxError)) throw e;
-        }
+        consume(line);
       }
     }
+    buf += dec.decode();
+    consume(buf);
     return full;
   } finally {
     clearTimeout(idle);
+    opts.signal?.removeEventListener('abort', onAbort);
   }
 }
