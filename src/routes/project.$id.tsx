@@ -177,7 +177,7 @@ function Builder() {
             ) : tab === "preview" ? (
               <iframe key={frameKey} title="preview" srcDoc={project.html} sandbox="allow-scripts allow-forms allow-modals allow-same-origin" className="h-full w-full rounded-lg border bg-card" />
             ) : (
-              <CodeBlock code={project.html} className="h-full overflow-auto" />
+              <CodeBlock code={project.html} className="h-full" />
             )}
           </div>
         </section>

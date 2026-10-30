@@ -18,7 +18,7 @@ export function CodeBlock({ code, lang = "html", className = "" }: { code: strin
     return hljs.highlight(code, { language: l }).value;
   }, [code, lang]);
   return (
-    <div className={`relative rounded-lg border bg-background/70 ${className}`}>
+    <div className={`relative flex flex-col overflow-hidden rounded-lg border bg-background/70 ${className}`}>
       <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs text-muted-foreground">
         <span className="font-mono">{lang}</span>
         <button
@@ -29,7 +29,7 @@ export function CodeBlock({ code, lang = "html", className = "" }: { code: strin
           {copied ? "কপি হয়েছে" : "কপি"}
         </button>
       </div>
-      <pre className="overflow-auto p-3 text-xs leading-relaxed"><code className="hljs font-mono" dangerouslySetInnerHTML={{ __html: html }} /></pre>
+      <pre className="min-h-0 flex-1 overflow-auto p-3 text-xs leading-relaxed"><code className="hljs font-mono" dangerouslySetInnerHTML={{ __html: html }} /></pre>
     </div>
   );
 }
