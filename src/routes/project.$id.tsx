@@ -13,6 +13,8 @@ export const Route = createFileRoute("/project/$id")({
       { name: "description", content: "AI এর সাথে চ্যাট করে অ্যাপ বানান ও প্রিভিউ দেখুন।" },
       { property: "og:title", content: "অ্যাপ বিল্ডার — NextBuild" },
       { property: "og:description", content: "AI এর সাথে চ্যাট করে অ্যাপ বানান ও প্রিভিউ দেখুন।" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Builder,
