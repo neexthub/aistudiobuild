@@ -49,9 +49,10 @@ describe('file operations', () => {
 });
 describe('agent orchestration', () => {
   it('has planner, coder, quality, test, build and publish agents', () => { expect(AGENT_ROLES).toEqual(['planner', 'coder', 'quality', 'test', 'build', 'publish']); });
-  it('rejects duplicate IDs, absent dependencies and cycles', () => {
+  it('rejects duplicate IDs and cycles; drops absent dependencies and tasks without files', () => {
     expect(() => validatePlan({ summaryBn: 'plan', tasks: [task('a'), task('a')] })).toThrow();
-    expect(() => validatePlan({ summaryBn: 'plan', tasks: [task('a', ['missing'])] })).toThrow();
+    expect(validatePlan({ summaryBn: 'plan', tasks: [task('a', ['missing'])] }).tasks[0]!.dependsOn).toEqual([]);
+    expect(validatePlan({ summaryBn: 'plan', tasks: [task('a'), { id: 'x', role: 'r', objective: 'o' }] }).tasks.map(t => t.id)).toEqual(['a']);
     expect(() => validatePlan({ summaryBn: 'plan', tasks: [task('a', ['b']), task('b', ['a'])] })).toThrow();
   });
   it('runs independent tasks in parallel and dependents after', async () => {

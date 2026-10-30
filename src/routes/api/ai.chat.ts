@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from 'zod';
 import { openStream, sseToNdjson } from '@/lib/ai-router.server';
 
-const requestSchema = z.object({ role: z.enum(['planner', 'coder', 'quality', 'fast']), format: z.literal('json').optional(), messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: z.string().max(60000) }).strict()).min(1).max(14) }).strict();
+const part = z.union([z.object({ type: z.literal('text'), text: z.string().max(60000) }).strict(), z.object({ type: z.literal('image_url'), image_url: z.object({ url: z.string().url().max(4000) }).strict() }).strict()]);
+const requestSchema = z.object({ role: z.enum(['planner', 'coder', 'quality', 'fast']), format: z.literal('json').optional(), attempt: z.number().int().min(0).max(10).optional(), messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: z.union([z.string().max(60000), z.array(part).max(8)]) }).strict()).min(1).max(20) }).strict();
 
 export const Route = createFileRoute("/api/ai/chat")({
   server: {
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/api/ai/chat")({
         const ctrl = new AbortController();
         request.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
         try {
-          const { body, label } = await openStream(parsed.data.role, parsed.data.messages, parsed.data.format === 'json', ctrl.signal);
+          const { body, label } = await openStream(parsed.data.role, parsed.data.messages, parsed.data.format === 'json', ctrl.signal, parsed.data.attempt ?? 0);
           return new Response(sseToNdjson(body, label), { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-cache" } });
         } catch (e) {
           if (ctrl.signal.aborted) return new Response(null, { status: 499 });

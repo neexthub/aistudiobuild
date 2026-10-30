@@ -12,8 +12,21 @@ export const reviewSchema = z.object({ summaryBn: z.string(), pass: z.boolean(),
 export const outputSchema = z.object({ summaryBn: z.string(), operations: z.array(operationSchema).min(1).max(30), checks: z.array(z.string()).max(20) }).strict();
 export type TaskState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type RunRecord = { id: string; createdAt: number; goal: string; state: 'planning' | 'running' | 'reviewing' | 'completed' | 'failed' | 'cancelled'; summary: string; tasks: Array<AgentTask & { state: TaskState }>; logs: string[] };
+/** Repairs common model slips (missing arrays, extra keys, dangling deps) before strict validation. */
+export function normalizePlan(input: unknown): unknown {
+  const raw = (input ?? {}) as { summaryBn?: unknown; tasks?: unknown };
+  const arr = (v: unknown) => Array.isArray(v) ? v.filter(x => typeof x === 'string') as string[] : [];
+  const tasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t: { id?: unknown; role?: unknown; objective?: unknown; description?: unknown; dependsOn?: unknown; readPaths?: unknown; writePaths?: unknown; files?: unknown; acceptanceChecks?: unknown }, i: number) => ({
+    id: String(t.id ?? `task-${i + 1}`).slice(0, 60), role: String(t.role ?? 'builder').slice(0, 60), objective: String(t.objective ?? t.description ?? 'কাজ').slice(0, 1500),
+    dependsOn: arr(t.dependsOn), readPaths: arr(t.readPaths).filter(validPath), writePaths: arr(t.writePaths ?? t.files).filter(validPath).slice(0, 30),
+    acceptanceChecks: arr(t.acceptanceChecks).length ? arr(t.acceptanceChecks).map(c => c.slice(0, 300)).slice(0, 15) : ['কাজ সম্পূর্ণ'],
+  })).filter(t => t.writePaths.length).slice(0, 24);
+  const ids = new Set(tasks.map(t => t.id));
+  tasks.forEach(t => { t.dependsOn = t.dependsOn.filter(d => ids.has(d) && d !== t.id); });
+  return { summaryBn: String(raw.summaryBn ?? 'পরিকল্পনা প্রস্তুত').slice(0, 2000), tasks };
+}
 export function validatePlan(input: unknown): AgentPlan {
-  const plan = planSchema.parse(input);
+  const plan = planSchema.parse(normalizePlan(input));
   const byId = new Map(plan.tasks.map(task => [task.id, task]));
   if (byId.size !== plan.tasks.length) throw new Error('পরিকল্পনায় duplicate task ID আছে।');
   const visiting = new Set<string>(), visited = new Set<string>();
@@ -49,4 +62,12 @@ export async function executePlan(plan: AgentPlan, signal: AbortSignal, execute:
 }
 export function jsonReply(text: string): unknown {
   return JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, ''));
+}
+
+/** Parses <<<FILE path>>> … <<<END>>> blocks (robust for large files, no JSON escaping). */
+export function parseFileBlocks(text: string): { summaryBn: string; files: { path: string; content: string }[] } {
+  const files: { path: string; content: string }[] = [];
+  const re = /<<<FILE\s+([^>\s]+)\s*>>>\r?\n([\s\S]*?)(?:\r?\n)?<<<END>>>/g;
+  for (const m of text.matchAll(re)) { const path = m[1]!.trim(); if (validPath(path)) files.push({ path, content: m[2]!.replace(/^```\w*\n/, '').replace(/\n```\s*$/, '') }); }
+  return { summaryBn: (text.match(/SUMMARY:\s*(.+)/)?.[1] ?? 'ফাইল লেখা হয়েছে').trim().slice(0, 300), files };
 }

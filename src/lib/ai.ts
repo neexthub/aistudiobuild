@@ -33,7 +33,24 @@ export async function checkStatus(): Promise<{ ok: boolean; models: string[] }> 
   }
 }
 
-/** Streams an Ollama chat reply. Aborts if no token arrives for `idleMs`. */
+/** Uploads an image file; returns a link the agents can see and embed. */
+export async function uploadImage(file: File): Promise<string> {
+  const form = new FormData(); form.append('file', file);
+  const r = await fetch('/api/ai/media', { method: 'POST', body: form });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.url) throw new Error(j.error ?? 'ছবি আপলোড ব্যর্থ');
+  return j.url;
+}
+
+/** Generates an image with AI; returns a stored link. */
+export async function generateImage(prompt: string, signal?: AbortSignal): Promise<string> {
+  const r = await fetch('/api/ai/media', { method: 'POST', signal: signal ?? null, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.url) throw new Error(j.error ?? 'ছবি তৈরি ব্যর্থ');
+  return j.url;
+}
+
+/** Streams a chat reply via the server router. Aborts if no token arrives for `idleMs`. */
 export async function streamChat(opts: {
   role: AgentRole;
   onProvider?: (label: string) => void;
@@ -43,6 +60,10 @@ export async function streamChat(opts: {
   signal?: AbortSignal;
   idleMs?: number;
   format?: 'json';
+  /** Image links attached to the last user message (vision). */
+  images?: string[];
+  /** Retry number; the server starts on a different model for each attempt. */
+  attempt?: number;
 }): Promise<string> {
   const ctrl = new AbortController();
   const onAbort = () => ctrl.abort();
@@ -51,9 +72,13 @@ export async function streamChat(opts: {
   let idle: ReturnType<typeof setTimeout> | undefined;
   const bump = () => {
     clearTimeout(idle);
-    idle = setTimeout(() => ctrl.abort(new Error("timeout")), opts.idleMs ?? 120_000);
+    idle = setTimeout(() => ctrl.abort(new Error("timeout")), opts.idleMs ?? 75_000);
   };
   bump();
+  const msgs: { role: string; content: unknown }[] = opts.messages.map(({ role, content }) => ({ role, content }));
+  const imgs = (opts.images ?? []).slice(0, 6);
+  const last = msgs.at(-1);
+  if (imgs.length && last) last.content = [{ type: 'text', text: last.content as string }, ...imgs.map(url => ({ type: 'image_url', image_url: { url } }))];
   try {
     const res = await fetch("/api/ai/chat", {
       method: "POST",
@@ -62,7 +87,8 @@ export async function streamChat(opts: {
       body: JSON.stringify({
         role: opts.role,
         format: opts.format,
-        messages: [{ role: "system", content: opts.system }, ...opts.messages.map(({ role, content }) => ({ role, content }))],
+        attempt: opts.attempt,
+        messages: [{ role: "system", content: opts.system }, ...msgs],
       }),
     });
     if (!res.ok || !res.body) throw new Error((await res.text().catch(() => "")) || `সার্ভার ত্রুটি ${res.status}`);
@@ -96,4 +122,14 @@ export async function streamChat(opts: {
     clearTimeout(idle);
     opts.signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/** Runs an AI step; if the answer is unusable or the model fails, retries on the next available model. */
+export async function withFallback<T>(step: (attempt: number) => Promise<T>, signal?: AbortSignal, tries = 4, onRetry?: (attempt: number, error: unknown) => void): Promise<T> {
+  let last: unknown;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try { return await step(attempt); }
+    catch (e) { if (signal?.aborted) throw e; last = e; onRetry?.(attempt + 1, e); }
+  }
+  throw last;
 }
