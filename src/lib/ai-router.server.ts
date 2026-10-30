@@ -27,6 +27,14 @@ export async function candidates(role: AgentRole): Promise<Candidate[]> {
   return out;
 }
 
+/** Lovable AI first; then pool keys grouped by provider, so a failing key falls to the same provider's other key before the next provider. */
+export function orderCandidates<T extends { keyId?: string; label: string }>(list: T[]): T[] {
+  const builtin = list.filter(c => !c.keyId), pool = list.filter(c => c.keyId);
+  const groups = new Map<string, T[]>();
+  for (const c of pool) { const p = c.label.split(' · ')[0]!; groups.set(p, [...(groups.get(p) ?? []), c]); }
+  return [...builtin, ...[...groups.values()].flat()].slice(0, 24);
+}
+
 /** Reads provider rate-limit headers (OpenAI-style, Groq, OpenRouter, GitHub). */
 export function rateInfo(h: Headers) {
   const num = (...n: string[]) => { for (const k of n) { const v = h.get(k); if (v != null && v !== '' && !isNaN(Number(v))) return Math.round(Number(v)); } return null; };
@@ -67,7 +75,7 @@ export async function openStream(role: AgentRole, messages: Msg[], json: boolean
   const list = await candidates(role);
   if (!list.length) throw new Error('কোনো AI প্রোভাইডার পাওয়া যায়নি। সেটিংসে API key যোগ করুন।');
   const errors: string[] = [];
-  const ordered = [...list.filter(c => !c.keyId), ...list.filter(c => c.keyId).slice(0, 7)];
+  const ordered = orderCandidates(list);
   // A retry (attempt > 0) starts on a different model so a bad answer is not repeated.
   const k = attempt % Math.max(1, ordered.length);
   const tries = [...ordered.slice(k), ...ordered.slice(0, k)];
