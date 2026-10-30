@@ -10,12 +10,30 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as PSlugRouteImport } from './routes/p.$slug'
+import { Route as ProjectIdRouteImport } from './routes/project.$id'
 import { Route as ApiAiChatRouteImport } from './routes/api/ai.chat'
 import { Route as ApiAiStatusRouteImport } from './routes/api/ai.status'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PSlugRoute = PSlugRouteImport.update({
+  id: '/p/$slug',
+  path: '/p/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectIdRoute = ProjectIdRouteImport.update({
+  id: '/project/$id',
+  path: '/project/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAiChatRoute = ApiAiChatRouteImport.update({
@@ -31,30 +49,61 @@ const ApiAiStatusRoute = ApiAiStatusRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/p/$slug': typeof PSlugRoute
+  '/project/$id': typeof ProjectIdRoute
   '/api/ai/chat': typeof ApiAiChatRoute
   '/api/ai/status': typeof ApiAiStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/p/$slug': typeof PSlugRoute
+  '/project/$id': typeof ProjectIdRoute
   '/api/ai/chat': typeof ApiAiChatRoute
   '/api/ai/status': typeof ApiAiStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/p/$slug': typeof PSlugRoute
+  '/project/$id': typeof ProjectIdRoute
   '/api/ai/chat': typeof ApiAiChatRoute
   '/api/ai/status': typeof ApiAiStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/ai/chat' | '/api/ai/status'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/p/$slug'
+    | '/project/$id'
+    | '/api/ai/chat'
+    | '/api/ai/status'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/ai/chat' | '/api/ai/status'
-  id: '__root__' | '/' | '/api/ai/chat' | '/api/ai/status'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/p/$slug'
+    | '/project/$id'
+    | '/api/ai/chat'
+    | '/api/ai/status'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/p/$slug'
+    | '/project/$id'
+    | '/api/ai/chat'
+    | '/api/ai/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
+  PSlugRoute: typeof PSlugRoute
+  ProjectIdRoute: typeof ProjectIdRoute
   ApiAiChatRoute: typeof ApiAiChatRoute
   ApiAiStatusRoute: typeof ApiAiStatusRoute
 }
@@ -66,6 +115,27 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$slug': {
+      id: '/p/$slug'
+      path: '/p/$slug'
+      fullPath: '/p/$slug'
+      preLoaderRoute: typeof PSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/project/$id': {
+      id: '/project/$id'
+      path: '/project/$id'
+      fullPath: '/project/$id'
+      preLoaderRoute: typeof ProjectIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/ai/chat': {
@@ -87,6 +157,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
+  PSlugRoute: PSlugRoute,
+  ProjectIdRoute: ProjectIdRoute,
   ApiAiChatRoute: ApiAiChatRoute,
   ApiAiStatusRoute: ApiAiStatusRoute,
 }
