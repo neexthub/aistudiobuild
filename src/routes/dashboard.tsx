@@ -12,6 +12,8 @@ export const Route = createFileRoute("/dashboard")({
       { name: "description", content: "আপনার সব অ্যাপ প্রজেক্ট এক জায়গায়।" },
       { property: "og:title", content: "আমার প্রজেক্ট — NextBuild" },
       { property: "og:description", content: "আপনার সব অ্যাপ প্রজেক্ট এক জায়গায়।" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Dashboard,

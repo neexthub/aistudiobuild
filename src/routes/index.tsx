@@ -11,6 +11,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "চ্যাট করে অ্যাপ বানান, প্রিভিউ দেখুন ও এক ক্লিকে পাবলিশ করুন। বাংলায় কথা বলা AI এজেন্ট।" },
       { property: "og:title", content: "NextBuild — বাংলায় AI অ্যাপ বিল্ডার" },
       { property: "og:description", content: "চ্যাট করে অ্যাপ বানান, প্রিভিউ দেখুন ও পাবলিশ করুন।" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Home,

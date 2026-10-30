@@ -9,6 +9,8 @@ export const Route = createFileRoute("/p/$slug")({
       { name: "description", content: "NextBuild দিয়ে তৈরি ও পাবলিশ করা অ্যাপ।" },
       { property: "og:title", content: `${params.slug} — NextBuild` },
       { property: "og:description", content: "NextBuild দিয়ে তৈরি ও পাবলিশ করা অ্যাপ।" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Published,
