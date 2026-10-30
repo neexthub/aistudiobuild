@@ -15,7 +15,7 @@ var cur;function cursor(){if(!cur){cur=document.createElement('div');cur.style.c
 function targets(){return [].slice.call(document.querySelectorAll('a[href],button,input:not([type=hidden]),select,textarea,[onclick],[role=button]')).filter(function(el){var r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled})}
 function label(el){return el.tagName.toLowerCase()+': '+((el.innerText||el.value||el.placeholder||el.getAttribute('aria-label')||el.getAttribute('href')||'').trim().replace(/\\s+/g,' ').slice(0,40))}
 window.addEventListener('message',function(e){var d=e.data||{};if(!d.nbT)return;
-if(d.nbT==='scan'){var t=targets();parent.postMessage({nbT:'scan',items:t.slice(0,40).map(label),title:document.title,text:((document.body&&document.body.innerText)||'').trim().length},'*')}
+if(d.nbT==='scan'){var t=targets();parent.postMessage({nbT:'scan',items:t.slice(0,40).map(label),title:document.title,over:document.documentElement.scrollWidth>innerWidth+2,w:innerWidth,text:((document.body&&document.body.innerText)||'').trim().length},'*')}
 if(d.nbT==='act'){var el=targets()[d.i];if(!el){parent.postMessage({nbT:'done',i:d.i,ok:false},'*');return}el.scrollIntoView({block:'center'});var r=el.getBoundingClientRect(),c=cursor();c.style.left=(r.left+r.width/2-10)+'px';c.style.top=(r.top+r.height/2-10)+'px';
 setTimeout(function(){try{var tag=el.tagName;if(tag==='INPUT'||tag==='TEXTAREA'){el.focus();if(el.type==='checkbox'||el.type==='radio')el.click();else{el.value=el.type==='number'?'5':el.type==='email'?'test@example.com':el.type==='date'?'2026-01-01':'পরীক্ষা';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))}}else if(tag==='SELECT'){el.selectedIndex=Math.min(1,el.options.length-1);el.dispatchEvent(new Event('change',{bubbles:true}))}else{el.click()}}catch(err){rep(err.message)}
 setTimeout(function(){parent.postMessage({nbT:'done',i:d.i,ok:true},'*')},500)},550)}
@@ -57,24 +57,28 @@ export function AgentBrowser({ files, autoRun, busy, onFix, onManualFix, onRepor
     const pages = htmlPages(filesRef.current).slice(0, 6);
     if (!pages.length) { add('error', 'কোনো HTML পেজ নেই — আগে অ্যাপ তৈরি করুন।'); return; }
     stop.current = false; errs.current = []; setIssues([]); setLogs([]); setRunning(true);
-    add('info', `AI ব্রাউজার চালু — ${pages.length}টি পেজ পরীক্ষা হবে`);
+    add('info', `AI ব্রাউজার চালু — ${pages.length}টি পেজ, ডেস্কটপ ও মোবাইলে পরীক্ষা হবে`);
     let actions = 0;
     try {
+      for (const size of ['ডেস্কটপ', 'মোবাইল'] as const) {
+      setMobile(size === 'মোবাইল'); add('info', `— ${size} ভিউ পরীক্ষা —`);
       for (const p of pages) {
         if (stop.current) break;
         add('info', `খোলা হচ্ছে: ${p}`); await load(p); await new Promise(r => setTimeout(r, 600));
-        post({ nbT: 'scan' }); const scan = await wait<{ items: string[]; title: string; text: number }>('scan', 3000);
+        post({ nbT: 'scan' }); const scan = await wait<{ items: string[]; title: string; text: number; over: boolean; w: number }>('scan', 3000);
         if (!scan) { errs.current.push(`${p}: পেজ সাড়া দিচ্ছে না`); add('error', 'পেজ সাড়া দিচ্ছে না'); continue; }
+        if (scan.over) { errs.current.push(`${p} (${size}, ${scan.w}px): পেজ পাশে বেরিয়ে যাচ্ছে — রেসপন্সিভ ঠিক নয়`); add('error', `${size}: পাশে স্ক্রল হচ্ছে, রেসপন্সিভ ঠিক নয়`); }
         if (scan.text < 20) { errs.current.push(`${p}: পেজ প্রায় ফাঁকা দেখাচ্ছে`); add('error', 'পেজ প্রায় ফাঁকা'); }
         add('ok', `"${scan.title || p}" — ${scan.items.length}টি বাটন/লিংক/ইনপুট`);
-        await shot(`${p} — খোলার পর`);
-        for (let i = 0; i < Math.min(scan.items.length, 8) && !stop.current; i++) {
+        await shot(`${size} · ${p} — খোলার পর`);
+        for (let i = 0; i < Math.min(scan.items.length, size === 'মোবাইল' ? 4 : 8) && !stop.current; i++) {
           const item = scan.items[i]!; add('act', `ক্লিক/টাইপ → ${item}`);
           post({ nbT: 'act', i }); const r = await wait<{ nbNav?: string }>('done', 4000); actions++;
           if (r?.nbNav) { add('info', `লিংক কাজ করছে → ${r.nbNav}`); await load(p); await new Promise(res => setTimeout(res, 500)); }
           else if (!r) { errs.current.push(`${p}: "${item}" ক্লিকের পরে পেজ আটকে গেছে`); add('error', 'ক্লিকের পরে সাড়া নেই'); await load(p); }
         }
-        await shot(`${p} — পরীক্ষার পর`);
+        await shot(`${size} · ${p} — পরীক্ষার পর`);
+      }
       }
     } finally {
       const found = [...new Set(errs.current)].slice(0, 15); setIssues(found); setRunning(false);
