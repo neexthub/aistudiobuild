@@ -2,10 +2,8 @@
 // (/api/ai/*) which talks to the self-hosted Ollama VPS.
 import type { ChatMsg } from "./store";
 
-export const MODELS = {
-  fast: "qwen2.5-coder:14b",
-  reason: "qwen2.5:14b",
-} as const;
+import type { AgentRole } from "./providers";
+export const MODELS = { fast: "অটো মাল্টি-প্রোভাইডার", reason: "অটো মাল্টি-প্রোভাইডার" } as const;
 
 export const SYSTEM_PROMPT = `তুমি NextBuild এর AI এজেন্ট। সবসময় বাংলায় কথা বলবে।
 ব্যবহারকারী যে অ্যাপ চায়, তার জন্য একটি সম্পূর্ণ, কাজ করা, একক HTML ফাইল তৈরি করবে (CSS ও JavaScript একই ফাইলে, <style> ও <script> ট্যাগে)।
@@ -37,7 +35,8 @@ export async function checkStatus(): Promise<{ ok: boolean; models: string[] }> 
 
 /** Streams an Ollama chat reply. Aborts if no token arrives for `idleMs`. */
 export async function streamChat(opts: {
-  model: string;
+  role: AgentRole;
+  onProvider?: (label: string) => void;
   system: string;
   messages: ChatMsg[];
   onToken: (t: string) => void;
@@ -61,7 +60,7 @@ export async function streamChat(opts: {
       headers: { "Content-Type": "application/json" },
       signal: ctrl.signal,
       body: JSON.stringify({
-        model: opts.model,
+        role: opts.role,
         format: opts.format,
         messages: [{ role: "system", content: opts.system }, ...opts.messages.map(({ role, content }) => ({ role, content }))],
       }),
@@ -74,6 +73,7 @@ export async function streamChat(opts: {
       if (!line.trim()) return;
       const j = JSON.parse(line);
       if (j.error) throw new Error(j.error);
+      if (j.provider) { opts.onProvider?.(j.provider); return; }
       const t = j.message?.content ?? '';
       if (t) { full += t; opts.onToken(t); }
     };
