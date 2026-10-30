@@ -15,6 +15,7 @@ import { Route as PSlugRouteImport } from './routes/p.$slug'
 import { Route as ProjectIdRouteImport } from './routes/project.$id'
 import { Route as ApiAiChatRouteImport } from './routes/api/ai.chat'
 import { Route as ApiAiMediaRouteImport } from './routes/api/ai.media'
+import { Route as ApiAiSearchRouteImport } from './routes/api/ai.search'
 import { Route as ApiAiStatusRouteImport } from './routes/api/ai.status'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const ApiAiMediaRoute = ApiAiMediaRouteImport.update({
   path: '/api/ai/media',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAiSearchRoute = ApiAiSearchRouteImport.update({
+  id: '/api/ai/search',
+  path: '/api/ai/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAiStatusRoute = ApiAiStatusRouteImport.update({
   id: '/api/ai/status',
   path: '/api/ai/status',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/project/$id': typeof ProjectIdRoute
   '/api/ai/chat': typeof ApiAiChatRoute
   '/api/ai/media': typeof ApiAiMediaRoute
+  '/api/ai/search': typeof ApiAiSearchRoute
   '/api/ai/status': typeof ApiAiStatusRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/project/$id': typeof ProjectIdRoute
   '/api/ai/chat': typeof ApiAiChatRoute
   '/api/ai/media': typeof ApiAiMediaRoute
+  '/api/ai/search': typeof ApiAiSearchRoute
   '/api/ai/status': typeof ApiAiStatusRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/project/$id': typeof ProjectIdRoute
   '/api/ai/chat': typeof ApiAiChatRoute
   '/api/ai/media': typeof ApiAiMediaRoute
+  '/api/ai/search': typeof ApiAiSearchRoute
   '/api/ai/status': typeof ApiAiStatusRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/project/$id'
     | '/api/ai/chat'
     | '/api/ai/media'
+    | '/api/ai/search'
     | '/api/ai/status'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/project/$id'
     | '/api/ai/chat'
     | '/api/ai/media'
+    | '/api/ai/search'
     | '/api/ai/status'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/project/$id'
     | '/api/ai/chat'
     | '/api/ai/media'
+    | '/api/ai/search'
     | '/api/ai/status'
   fileRoutesById: FileRoutesById
 }
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   ProjectIdRoute: typeof ProjectIdRoute
   ApiAiChatRoute: typeof ApiAiChatRoute
   ApiAiMediaRoute: typeof ApiAiMediaRoute
+  ApiAiSearchRoute: typeof ApiAiSearchRoute
   ApiAiStatusRoute: typeof ApiAiStatusRoute
 }
 
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiMediaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/ai/search': {
+      id: '/api/ai/search'
+      path: '/api/ai/search'
+      fullPath: '/api/ai/search'
+      preLoaderRoute: typeof ApiAiSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/ai/status': {
       id: '/api/ai/status'
       path: '/api/ai/status'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProjectIdRoute: ProjectIdRoute,
   ApiAiChatRoute: ApiAiChatRoute,
   ApiAiMediaRoute: ApiAiMediaRoute,
+  ApiAiSearchRoute: ApiAiSearchRoute,
   ApiAiStatusRoute: ApiAiStatusRoute,
 }
 export const routeTree = rootRouteImport
