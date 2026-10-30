@@ -157,3 +157,12 @@ export async function withFallback<T>(step: (attempt: number) => Promise<T>, sig
   }
   throw last;
 }
+
+/** Free online search (no key). Returns short notes for agents; empty on failure. */
+export async function webSearch(q: string, signal?: AbortSignal): Promise<{ source: string; results: { title: string; snippet: string; url: string }[] }> {
+  try {
+    const r = await fetch('/api/ai/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q }), signal });
+    if (!r.ok) return { source: '', results: [] };
+    return await r.json();
+  } catch { return { source: '', results: [] }; }
+}

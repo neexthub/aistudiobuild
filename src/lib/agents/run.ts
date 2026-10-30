@@ -1,4 +1,4 @@
-import { streamChat, withFallback } from '@/lib/ai';
+import { streamChat, webSearch, withFallback } from '@/lib/ai';
 import { applyOperations, contentHash, type FileMap } from '@/lib/project/files';
 import { bundleHtml, testFiles } from '@/lib/project/bundle';
 import { CODER_SYSTEM, PLANNER_SYSTEM, QUALITY_SYSTEM } from './prompts';
@@ -16,9 +16,12 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
   const notify = () => changed(structuredClone(run));
   const log = (m: string) => { run.logs.push(m); notify(); };
   const provider = (who: string) => (label: string) => log(`${who} → ${label}`);
-  const shared = { chatMemory: extra.memory || undefined, imageLinks: [...(extra.images ?? []), ...(extra.assets ?? [])] };
+  const shared: Record<string, unknown> = { chatMemory: extra.memory || undefined, imageLinks: [...(extra.images ?? []), ...(extra.assets ?? [])] };
   notify();
   try {
+    const found = await webSearch(goal.slice(0, 200), signal);
+    if (found.results.length) { shared.webNotes = found.results.map(r => `${r.title}: ${r.snippet} (${r.url})`).join('\n').slice(0, 3000); log(`সার্চ এজেন্ট: অনলাইনে ${found.results.length}টি ফল পাওয়া গেছে (${found.source})`); }
+    else log('সার্চ এজেন্ট: অনলাইনে প্রাসঙ্গিক ফল পাওয়া যায়নি — নিজের জ্ঞানে এগোনো হচ্ছে');
     const retry = (who: string) => (n: number, e: unknown) => log(`${who}: উত্তর ব্যবহারযোগ্য হয়নি (${e instanceof Error ? e.message.slice(0, 80) : 'ত্রুটি'}) — অন্য মডেলে আবার চেষ্টা #${n}`);
     const plan = await withFallback(async attempt => {
     let planText = '';
