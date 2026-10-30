@@ -5,7 +5,7 @@ import { PROVIDERS, type AgentRole } from './providers';
 
 export type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
 type Msg = { role: string; content: string | Part[] };
-type Candidate = { label: string; url: string; key: string; model: string; keyId?: string; vision: boolean };
+type Candidate = { label: string; url: string; key: string; model: string; keyId?: string; vision: boolean; builtin?: boolean };
 export const BUILTIN_MODELS: Record<AgentRole, string> = { planner: 'google/gemini-3.8-flash', coder: 'google/gemini-3.8-flash', quality: 'google/gemini-3.8-flash', fast: 'google/gemini-3.1-flash-lite' };
 
 async function admin() { return (await import('@/integrations/supabase/client.server')).supabaseAdmin; }
