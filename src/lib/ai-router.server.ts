@@ -42,13 +42,16 @@ async function mark(keyId: string | undefined, ok: boolean, status = 0) {
 }
 
 /** Opens a streaming completion on the first candidate that answers OK. */
-export async function openStream(role: AgentRole, messages: Msg[], json: boolean, signal: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; label: string }> {
+export async function openStream(role: AgentRole, messages: Msg[], json: boolean, signal: AbortSignal, attempt = 0): Promise<{ body: ReadableStream<Uint8Array>; label: string }> {
   const hasImages = messages.some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image_url'));
   const textOnly = messages.map(m => Array.isArray(m.content) ? { ...m, content: m.content.map(p => p.type === 'text' ? p.text : '[ছবি সংযুক্ত]').join('\n') } : m);
   const list = await candidates(role);
   if (!list.length) throw new Error('কোনো AI প্রোভাইডার পাওয়া যায়নি। সেটিংসে API key যোগ করুন।');
   const errors: string[] = [];
-  const tries = [...list.filter(c => !c.keyId), ...list.filter(c => c.keyId).slice(0, 7)];
+  const ordered = [...list.filter(c => !c.keyId), ...list.filter(c => c.keyId).slice(0, 7)];
+  // A retry (attempt > 0) starts on a different model so a bad answer is not repeated.
+  const k = attempt % Math.max(1, ordered.length);
+  const tries = [...ordered.slice(k), ...ordered.slice(0, k)];
   for (const c of tries) {
     try {
       const body = { model: c.model, messages: hasImages && !c.vision ? textOnly : messages, stream: true, ...(c.keyId ? { temperature: 0.3 } : {}), ...(json ? { response_format: { type: 'json_object' } } : {}) };

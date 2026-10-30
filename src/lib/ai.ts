@@ -62,6 +62,8 @@ export async function streamChat(opts: {
   format?: 'json';
   /** Image links attached to the last user message (vision). */
   images?: string[];
+  /** Retry number; the server starts on a different model for each attempt. */
+  attempt?: number;
 }): Promise<string> {
   const ctrl = new AbortController();
   const onAbort = () => ctrl.abort();
@@ -85,6 +87,7 @@ export async function streamChat(opts: {
       body: JSON.stringify({
         role: opts.role,
         format: opts.format,
+        attempt: opts.attempt,
         messages: [{ role: "system", content: opts.system }, ...msgs],
       }),
     });
@@ -119,4 +122,14 @@ export async function streamChat(opts: {
     clearTimeout(idle);
     opts.signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/** Runs an AI step; if the answer is unusable or the model fails, retries on the next available model. */
+export async function withFallback<T>(step: (attempt: number) => Promise<T>, signal?: AbortSignal, tries = 4, onRetry?: (attempt: number, error: unknown) => void): Promise<T> {
+  let last: unknown;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try { return await step(attempt); }
+    catch (e) { if (signal?.aborted) throw e; last = e; onRetry?.(attempt + 1, e); }
+  }
+  throw last;
 }
