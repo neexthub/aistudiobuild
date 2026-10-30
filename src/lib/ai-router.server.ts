@@ -5,7 +5,7 @@ import { PROVIDERS, type AgentRole } from './providers';
 
 type Msg = { role: string; content: string };
 type Candidate = { label: string; url: string; key: string; model: string; keyId?: string };
-const BUILTIN_MODELS: Record<AgentRole, string> = { planner: 'google/gemini-2.5-flash', coder: 'google/gemini-2.5-flash', quality: 'google/gemini-2.5-flash', fast: 'google/gemini-2.5-flash-lite' };
+const BUILTIN_MODELS: Record<AgentRole, string> = { planner: 'google/gemini-3.8-flash', coder: 'google/gemini-3.8-flash', quality: 'google/gemini-3.8-flash', fast: 'google/gemini-3.1-flash-lite' };
 
 async function admin() { return (await import('@/integrations/supabase/client.server')).supabaseAdmin; }
 
