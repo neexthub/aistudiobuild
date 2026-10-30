@@ -9,4 +9,4 @@
 - [x] Shared API key pool + settings modal, auto rotation/failover, built-in fallback
 - [x] Planner → parallel subagents → quality → test → build → publish
 - [x] Real publish link for multi-file apps
-- [ ] Visible agent terminal: agent file commands (ls/cat/create/edit/rm) shown live; user can run them too
+- [x] Visible agent terminal: agent file commands (ls/cat/create/edit/rm) shown live; user can run them too
