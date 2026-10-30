@@ -44,7 +44,7 @@ export async function uploadImage(file: File): Promise<string> {
 
 /** Generates an image with AI; returns a stored link. */
 export async function generateImage(prompt: string, signal?: AbortSignal): Promise<string> {
-  const r = await fetch('/api/ai/media', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+  const r = await fetch('/api/ai/media', { method: 'POST', signal: signal ?? null, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.url) throw new Error(j.error ?? 'ছবি তৈরি ব্যর্থ');
   return j.url;

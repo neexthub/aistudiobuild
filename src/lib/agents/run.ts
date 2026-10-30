@@ -20,7 +20,7 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
   notify();
   try {
     let planText = '';
-    const planText2 = await streamChat({ role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images, format: 'json', signal, onToken: t => { planText += t; token(planText); } });
+    const planText2 = await streamChat({ role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images ?? [], format: 'json', signal, onToken: t => { planText += t; token(planText); } });
     const plan = validatePlan(jsonReply(planText2));
     let candidate = { ...files };
     run = { ...run, state: 'running', summary: plan.summaryBn, tasks: plan.tasks.map(task => ({ ...task, state: 'queued' })) };
