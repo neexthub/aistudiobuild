@@ -62,7 +62,7 @@ export async function streamChat(opts: StreamOpts & { resumes?: number }): Promi
   for (let i = 0; ; i++) {
     const messages = full ? [...opts.messages, { role: 'assistant' as const, content: full }, { role: 'user' as const, content: 'আগের মডেল মাঝপথে থেমে গেছে। ঠিক যেখানে থেমেছে সেখান থেকে বাকি অংশ লেখো — আগের লেখা পুনরাবৃত্তি করবে না, কোনো ভূমিকা দেবে না।' }] : opts.messages;
     try {
-      const part = await streamOnce({ ...opts, attempt, messages, images: full ? [] : opts.images, onToken: t => { full += t; opts.onToken(t); } });
+      const part = await streamOnce({ ...opts, attempt, messages, images: full ? [] : (opts.images ?? []), onToken: t => { full += t; opts.onToken(t); } });
       void part; return full;
     } catch (e) {
       const msg = (e as Error).message ?? '';
