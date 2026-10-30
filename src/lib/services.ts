@@ -7,5 +7,5 @@ export const TOOL_SERVICES = [
   { id: 'url', name: 'URL পাঠক', status: 'blocked', detail: 'এখনো যুক্ত হয়নি' },
   { id: 'search', name: 'অনলাইন সার্চ', status: 'blocked', detail: 'এখনো যুক্ত হয়নি' },
   { id: 'video', name: 'ভিডিও তৈরি', status: 'blocked', detail: 'ফ্রি নির্ভরযোগ্য সার্ভিস নেই' },
-  { id: 'runner', name: 'Next.js build', status: 'blocked', detail: 'আলাদা build সার্ভার প্রয়োজন; ZIP দিয়ে নিজে চালান' },
+  { id: 'runner', name: 'HTML বিল্ড', status: 'ready', detail: 'ব্রাউজারেই বহু-পাতার HTML/CSS/JS অ্যাপ বিল্ড ও প্রিভিউ হয়' },
 ] as const;
