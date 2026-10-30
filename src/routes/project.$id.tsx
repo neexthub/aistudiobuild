@@ -171,7 +171,7 @@ function Builder() {
         setSelected('index.html'); setDraft(generated['index.html'] ?? ''); setTabs(['index.html']); setView('preview'); void suggestNext(goal);
       } else {
         let full = '';
-        const reply = await streamChat({ role: 'coder', system: SYSTEM_PROMPT, messages: [{ role: 'user', content: fullGoal + (memory ? '\nচ্যাট মেমরি:\n' + memory : '') + ([...imgs, ...assets].length ? '\nব্যবহারযোগ্য ছবির লিংক:\n' + [...imgs, ...assets].join('\n') : '') + (files['index.html'] ? '\nCurrent HTML:\n' + files['index.html'].slice(0, 6500) : '') }], images: imgs, signal: abort.signal, onToken: token => { full += token; setStreaming(full); } });
+        const reply = await withFallback(async attempt => { full = ''; const r = await streamChat({ attempt, role: 'coder', system: SYSTEM_PROMPT, messages: [{ role: 'user', content: fullGoal + (memory ? '\nচ্যাট মেমরি:\n' + memory : '') + ([...imgs, ...assets].length ? '\nব্যবহারযোগ্য ছবির লিংক:\n' + [...imgs, ...assets].join('\n') : '') + (files['index.html'] ? '\nCurrent HTML:\n' + files['index.html'].slice(0, 6500) : '') }], images: imgs, signal: abort.signal, onToken: token => { full += token; setStreaming(full); } }); if (!extractHtml(r)) throw new Error('সম্পূর্ণ HTML পাওয়া যায়নি'); return r; }, abort.signal, 3, n => setStreaming(`অন্য মডেলে আবার চেষ্টা #${n}…`));
         const html = extractHtml(reply); if (!html) throw new Error('সম্পূর্ণ HTML পাওয়া যায়নি; source অপরিবর্তিত আছে।');
         const result = saveProjectFiles(id, { 'index.html': html }, 'HTML agent update', 'html');
         const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: reply, model: MODELS.fast }] }); if (updated) assign(updated); setView('preview');

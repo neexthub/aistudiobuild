@@ -72,7 +72,7 @@ export async function streamChat(opts: {
   let idle: ReturnType<typeof setTimeout> | undefined;
   const bump = () => {
     clearTimeout(idle);
-    idle = setTimeout(() => ctrl.abort(new Error("timeout")), opts.idleMs ?? 120_000);
+    idle = setTimeout(() => ctrl.abort(new Error("timeout")), opts.idleMs ?? 75_000);
   };
   bump();
   const msgs: { role: string; content: unknown }[] = opts.messages.map(({ role, content }) => ({ role, content }));

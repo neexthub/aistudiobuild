@@ -14,3 +14,4 @@
 - [ ] Fix agent stream abort (planner stalls)
 - [ ] Lovable-style inline work steps in chat (read/edit/run, click for details)
 - [ ] Auto-switch to another model when one fails mid-stream
+- [x] Auto-switch model on failure/stall in every agent step
