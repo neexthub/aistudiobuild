@@ -16,6 +16,6 @@
 - Agent plans use validated dependency graphs and sequential scoped inference; source output is a candidate, never a compiler/test or deployment success signal.
 - Keep unavailable external runner/search/media/public-publish tools visibly blocked until configured; browser-local accounts and source do not authorize public services.
 - Agent steps retry via withFallback with an `attempt` index so the server starts on a different model; coders/quality emit <<<FILE>>> blocks, not JSON, because JSON-escaped full files break often.
-- Router tries Lovable AI first, then the shared key pool; SSE→NDJSON pull must loop until it enqueues, or the stream stalls.
+- SSE→NDJSON pull must loop until it enqueues, or the stream stalls.
 - Router order: Lovable AI, then pool keys grouped by provider (same provider's other key before next provider); agent steps have per-attempt time budgets so slow models hand over.
 - Full-mode agents get free keyless web search (/api/ai/search: DuckDuckGo, Wikipedia fallback) as untrusted webNotes.
