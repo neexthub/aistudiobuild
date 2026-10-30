@@ -14,7 +14,7 @@ const ctxOf = (files: FileMap, paths: string[], cap = 40000) => {
 const timed = (signal: AbortSignal, ms: number) => AbortSignal.any([signal, AbortSignal.timeout(ms)]);
 
 /** Planner → parallel coders → quality agent (fix loop) → test agent → build agent. */
-export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[]; onDraft?: (files: FileMap) => void } = {}): Promise<{ files: FileMap; html: string }> {
+export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[]; onDraft?: (files: FileMap) => void; onLive?: (path: string, content: string) => void } = {}): Promise<{ files: FileMap; html: string }> {
   let run: RunRecord = { id: crypto.randomUUID(), createdAt: Date.now(), goal, state: 'planning', summary: 'পরিকল্পনা এজেন্ট কাজ ভাগ করছে', tasks: [], logs: [] };
   const notify = () => changed(structuredClone(run));
   const log = (m: string) => { run.logs.push(m); notify(); };
@@ -37,7 +37,8 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
     await executePlan(plan, signal, async task => {
       const context = ctxOf(candidate, [...new Set([...task.readPaths, ...task.writePaths])]);
       const result = await withFallback(async attempt => {
-      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal: timed(signal, 150_000), onToken: () => {} });
+      let live = '', last = 0;
+      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal: timed(signal, 150_000), onToken: t => { if (!extra.onLive) return; live += t; const now = Date.now(); if (now - last < 400) return; last = now; const m = [...live.matchAll(/<<<FILE\s+([^>\s]+)\s*>>>\r?\n([\s\S]*?)(?=<<<END>>>|$)/g)].at(-1); if (m && task.writePaths.includes(m[1]!)) extra.onLive(m[1]!, m[2]!); } });
       const parsed = parseFileBlocks(reply);
       const mine = parsed.files.filter(f => task.writePaths.includes(f.path));
       if (!mine.length) throw new Error('নির্ধারিত ফাইল পাওয়া যায়নি');

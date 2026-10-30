@@ -58,7 +58,7 @@ function Builder() {
   }, [id, nav]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [project?.messages.length, busy]);
   if (!project) return null;
-  const files = project.files ?? {}, dirty = !!selected && draft !== files[selected];
+  const files = { ...(project.files ?? {}), ...live }, dirty = !!selected && draft !== files[selected];
   const protectDraft = () => !dirty || confirm('অসংরক্ষিত পরিবর্তন বাদ দেবেন?');
   const openFile = (path: string) => { if (!protectDraft()) return; setSelected(path); setDraft(files[path] ?? ''); setTabs(old => old.includes(path) ? old : [...old, path]); setView('files'); setPanel('workspace'); };
   const saveDraft = () => {
@@ -166,7 +166,7 @@ function Builder() {
       } else if (mode === 'agents') {
         setView('preview');
         const base: typeof files = { ...files };
-        const { files: generated } = await buildWithAgents(fullGoal, base, abort.signal, persistRun, value => setStreaming(value), { images: imgs, memory, assets, onDraft: draft => { assign(saveProjectFiles(id, draft, 'এজেন্ট খসড়া', 'html')); setFrameKey(k => k + 1); } });
+        const { files: generated } = await buildWithAgents(fullGoal, base, abort.signal, persistRun, value => setStreaming(value), { images: imgs, memory, assets, onLive: (path, content) => { setLive(l => ({ ...l, [path]: content })); setSelected(path); setDraft(content); setTabs(t => t.includes(path) ? t : [...t, path]); setView('files'); }, onDraft: draft => { setLive({}); setView('preview'); assign(saveProjectFiles(id, draft, 'এজেন্ট খসড়া', 'html')); setFrameKey(k => k + 1); } });
         const result = saveProjectFiles(id, generated, 'এজেন্ট আপডেট', 'html');
         setTerm(t => [...t, ...fileChanges(base, generated).map(c => ({ who: 'agent' as const, cmd: `${c.kind === 'deleted' ? 'rm' : 'write'} ${c.path}`, output: c.kind === 'added' ? '+ নতুন ফাইল' : c.kind === 'deleted' ? '− মুছে ফেলা' : '~ পরিবর্তিত' })), { who: 'agent', cmd: 'build', output: '✓ বিল্ড ও টেস্ট শেষ' }]);
         const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: `কাজ শেষ! ${Object.keys(generated).length}টি ফাইল তৈরি, মান যাচাই ও টেস্ট হয়েছে। প্রিভিউ দেখুন, তারপর পাবলিশ করুন।`, model: MODELS.fast, steps: [...runViewRef.current, ...fileChanges(base, generated).map(c => commandStep(c.kind === 'deleted' ? 'rm ' + c.path : 'write ' + c.path, c.kind))] }] }); if (updated) assign(updated);
