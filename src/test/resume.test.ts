@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { streamChat } from '@/lib/ai';
 
-const body = (lines: string[], fail = false) => new ReadableStream({ start(c) { for (const l of lines) c.enqueue(new TextEncoder().encode(l + '\n')); if (fail) c.error(new Error('stream broke')); else c.close(); } });
+const body = (lines: string[], fail = false) => { let i = 0; return new ReadableStream({ pull(c) { if (i < lines.length) c.enqueue(new TextEncoder().encode(lines[i++] + '\n')); else if (fail) c.error(new Error('stream broke')); else c.close(); } }); };
 afterEach(() => vi.unstubAllGlobals());
 
 describe('model resume', () => {
