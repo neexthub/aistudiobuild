@@ -18,22 +18,25 @@ import { nextTemplate } from '@/lib/project/template';
 import { contentHash, fileChanges } from '@/lib/project/files';
 import { downloadSource } from '@/lib/project/export';
 import { TOOL_SERVICES } from '@/lib/services';
+import { runScript, SHELL_AGENT_PROMPT } from '@/lib/project/shell';
+type TermLine = { who: 'user' | 'agent'; cmd: string; output: string; error?: boolean };
 
 export const Route = createFileRoute('/project/$id')({
   head: () => ({ meta: [{ title: 'NextBuild Studio — বাংলা মাল্টি-ফাইল অ্যাপ বিল্ডার' }, { name: 'description', content: 'ফাইল সম্পাদনা, পরিকল্পনাভিত্তিক এজেন্ট, বাংলা চ্যাট এবং অ্যাপ প্রিভিউ।' }, { property: 'og:title', content: 'NextBuild Studio — অ্যাপ বিল্ডার' }, { property: 'og:description', content: 'বাংলা চ্যাট ও মাল্টি-ফাইল অ্যাপ স্টুডিও।' }, { property: 'og:type', content: 'website' }, { name: 'twitter:card', content: 'summary_large_image' }] }), component: Builder,
 });
-type View = 'preview' | 'files' | 'logs' | 'tools' | 'history';
+type View = 'preview' | 'files' | 'terminal' | 'logs' | 'tools' | 'history';
 const taskNames = { queued: 'অপেক্ষায়', running: 'কাজ চলছে', completed: 'শেষ', failed: 'ব্যর্থ', cancelled: 'বন্ধ' };
 function Builder() {
   const { id } = Route.useParams(), nav = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
-  const [input, setInput] = useState(''), [mode, setMode] = useState<'agents' | 'html'>('agents');
+  const [input, setInput] = useState(''), [mode, setMode] = useState<'agents' | 'html' | 'shell'>('agents');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [streaming, setStreaming] = useState('');
   const [view, setView] = useState<View>('preview'), [panel, setPanel] = useState<'chat' | 'workspace'>('chat');
   const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop'), [frameKey, setFrameKey] = useState(0);
   const [selected, setSelected] = useState(''), [tabs, setTabs] = useState<string[]>([]), [draft, setDraft] = useState('');
   const [filter, setFilter] = useState(''), [suggestions, setSuggestions] = useState(false), [liveRun, setLiveRun] = useState<RunRecord | null>(null);
   const [publishOpen, setPublishOpen] = useState(false), [copied, setCopied] = useState(false), [settingsOpen, setSettingsOpen] = useState(false), [publishing, setPublishing] = useState(false), [publishedUrl, setPublishedUrl] = useState('');
+  const [term, setTerm] = useState<TermLine[]>([]), [cmd, setCmd] = useState('');
   const ctrl = useRef<AbortController | null>(null), latest = useRef<Project | null>(null), bottom = useRef<HTMLDivElement>(null);
   const assign = (p: Project) => { latest.current = p; setProject(p); };
   useEffect(() => {
@@ -75,6 +78,12 @@ function Builder() {
     const runs = [...(p.runs ?? []).filter(r => r.id !== run.id), run].slice(-10);
     const updated = updateProject(id, { runs }); if (updated) assign(updated);
   };
+  const execScript = (script: string, who: 'user' | 'agent') => {
+    const cur = getProject(id)?.files ?? {}; const { files: next, log } = runScript(cur, script);
+    setTerm(t => [...t, ...log.map(l => ({ who, ...l }))].slice(-300));
+    if (next !== cur && JSON.stringify(next) !== JSON.stringify(cur)) { const p = saveProjectFiles(id, next, who === 'agent' ? 'কমান্ড এজেন্ট' : 'টার্মিনাল', 'html'); assign(p); setSelected(s => next[s] !== undefined ? s : ''); setDraft(d => next[selected] ?? d); }
+    return log;
+  };
   const send = async () => {
     const goal = input.trim(); if (!goal || busy || !protectDraft()) return;
     setBusy(true); setError(''); setStreaming('');
@@ -83,10 +92,21 @@ function Builder() {
       const userMsg: ChatMsg = { role: 'user', content: goal };
       const p = updateProject(id, { messages: [...(latest.current?.messages ?? []), userMsg] }); if (p) assign(p);
       setInput('');
-      if (mode === 'agents') {
+      if (mode === 'shell') {
+        setView('terminal'); setPanel('workspace');
+        const list = Object.entries(files).map(([p, c]) => `--- ${p}\n${c.slice(0, 2500)}`).join('\n').slice(0, 9000);
+        let full = '';
+        const reply = await streamChat({ role: 'coder', system: SHELL_AGENT_PROMPT, messages: [{ role: 'user', content: `অনুরোধ: ${goal}\nবর্তমান ফাইল:\n${list || '(খালি প্রজেক্ট)'}` }], signal: abort.signal, onToken: t => { full += t; setStreaming(full); } });
+        const script = [...reply.matchAll(/```(?:sh|bash|shell)?\n([\s\S]*?)```/g)].map(m => m[1]).join('\n');
+        if (!script.trim()) throw new Error('এজেন্ট কোনো কমান্ড দেয়নি।');
+        const log = execScript(script, 'agent'), failed = log.find(l => l.error);
+        const note = reply.split('```')[0].trim() || 'কমান্ড চালানো হয়েছে।';
+        const updated = updateProject(id, { messages: [...(getProject(id)?.messages ?? []), { role: 'assistant', content: `${note}\n\n${log.length}টি কমান্ড চলেছে${failed ? ` — ত্রুটি: ${failed.output}` : ' ✓'}। টার্মিনাল ট্যাবে দেখুন।`, model: MODELS.fast }] }); if (updated) assign(updated);
+      } else if (mode === 'agents') {
         const base = project.kind === 'html' && files['index.html'] ? files : {};
         const { files: generated } = await buildWithAgents(goal, base, abort.signal, persistRun, value => setStreaming(value));
         const result = saveProjectFiles(id, generated, 'এজেন্ট আপডেট', 'html');
+        setTerm(t => [...t, ...fileChanges(base, generated).map(c => ({ who: 'agent' as const, cmd: `${c.kind === 'deleted' ? 'rm' : 'write'} ${c.path}`, output: c.kind === 'added' ? '+ নতুন ফাইল' : c.kind === 'deleted' ? '− মুছে ফেলা' : '~ পরিবর্তিত' })), { who: 'agent', cmd: 'build', output: '✓ বিল্ড ও টেস্ট শেষ' }]);
         const updated = updateProject(id, { messages: [...result.messages, { role: 'assistant', content: `কাজ শেষ! ${Object.keys(generated).length}টি ফাইল তৈরি, মান যাচাই ও টেস্ট হয়েছে। প্রিভিউ দেখুন, তারপর পাবলিশ করুন।`, model: MODELS.fast }] }); if (updated) assign(updated);
         setSelected('index.html'); setDraft(generated['index.html'] ?? ''); setTabs(['index.html']); setView('preview');
       } else {
@@ -115,7 +135,7 @@ function Builder() {
   };
   const currentRevision = project.revisions?.at(-1), previousRevision = project.revisions?.at(-2);
   const changes = currentRevision ? fileChanges(previousRevision?.files ?? {}, currentRevision.files) : [];
-  const viewItems = [['preview', Eye, 'প্রিভিউ'], ['files', Files, 'ফাইল'], ['logs', Terminal, 'লগ'], ['tools', Wrench, 'টুল'], ['history', History, 'ইতিহাস']] as const;
+  const viewItems = [['preview', Eye, 'প্রিভিউ'], ['files', Files, 'ফাইল'], ['terminal', Terminal, 'টার্মিনাল'], ['logs', History, 'লগ'], ['tools', Wrench, 'টুল'], ['history', History, 'ইতিহাস']] as const;
   return <div className="studio-shell flex h-dvh flex-col overflow-hidden bg-background">
     <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card/60 px-3">
       <Button asChild variant="ghost" size="icon" title="প্রজেক্টে ফিরে যান"><Link to="/dashboard" aria-label="ফিরে যান"><ArrowLeft /></Link></Button>
@@ -134,7 +154,7 @@ function Builder() {
           {error && <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"><AlertCircle className="h-4 w-4 shrink-0" /><span className="break-words">{error}</span></div>}<div ref={bottom} />
         </div>
         <div className="shrink-0 space-y-2 border-t p-3">
-          <select aria-label="এজেন্ট মোড" value={mode} disabled={busy} onChange={e => setMode(e.target.value as 'agents' | 'html')} className="h-8 w-full rounded-md border bg-card px-2 text-xs"><option value="agents">মাল্টি-এজেন্ট: পরিকল্পনা → প্যারালাল কোড → মান যাচাই → টেস্ট → বিল্ড</option><option value="html">দ্রুত একক এজেন্ট · HTML</option></select>
+          <select aria-label="এজেন্ট মোড" value={mode} disabled={busy} onChange={e => setMode(e.target.value as 'agents' | 'html' | 'shell')} className="h-8 w-full rounded-md border bg-card px-2 text-xs"><option value="agents">মাল্টি-এজেন্ট: পরিকল্পনা → প্যারালাল কোড → মান যাচাই → টেস্ট → বিল্ড</option><option value="shell">কমান্ড এজেন্ট: টার্মিনালে কমান্ড চালিয়ে ফাইল তৈরি/সম্পাদনা</option><option value="html">দ্রুত একক এজেন্ট · HTML</option></select>
           <PromptSuggestions value={input} busy={busy} enabled={suggestions} setEnabled={setSuggestions} accept={setInput} />
           <div className="flex items-end gap-2 rounded-md border bg-card p-2"><textarea aria-label="অ্যাপের অনুরোধ" rows={3} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }} placeholder="আপনার অ্যাপের অনুরোধ লিখুন…" className="min-w-0 flex-1 resize-none bg-transparent text-sm outline-none" />{busy ? <Button variant="destructive" size="icon" aria-label="থামান" onClick={() => ctrl.current?.abort()}><Square /></Button> : <Button size="icon" aria-label="পাঠান" disabled={!input.trim()} onClick={() => void send()}><Send /></Button>}</div>
         </div>
@@ -146,6 +166,7 @@ function Builder() {
           <section className="flex min-w-0 flex-1 flex-col"><div className="flex h-9 shrink-0 overflow-x-auto border-b">{tabs.filter(path => files[path] !== undefined).map(path => <div key={path} className={`flex shrink-0 items-center border-r ${selected === path ? 'bg-card' : ''}`}><Button variant="ghost" size="sm" className="rounded-none text-[10px]" onClick={() => openFile(path)}>{path.split('/').at(-1)}</Button><Button variant="ghost" size="icon" className="h-6 w-5" aria-label={`${path} ট্যাব বন্ধ`} onClick={() => { if (path === selected && !protectDraft()) return; setTabs(old => old.filter(t => t !== path)); if (selected === path) { setSelected(''); setDraft(''); } }}><X className="h-3 w-3" /></Button></div>)}</div>{selected ? <SourceEditor path={selected} value={draft} onChange={setDraft} onSave={saveDraft} dirty={dirty} /> : <Empty icon={Files} title="কোনো ফাইল খোলা নেই" action={<Button variant="outline" onClick={template}>Next.js starter</Button>} />}</section>
         </div>}
         {view === 'preview' && <><div className="flex h-11 shrink-0 items-center gap-1 border-b px-3"><div className="flex items-center gap-1">{([['desktop', Monitor, 'Desktop'], ['tablet', Tablet, 'Tablet'], ['mobile', Smartphone, 'Mobile']] as const).map(([key, Icon, label]) => <Button key={key} variant={device === key ? 'secondary' : 'ghost'} size="icon" aria-label={label} title={label} onClick={() => setDevice(key)}><Icon /></Button>)}</div><span className="ml-auto hidden text-xs text-muted-foreground sm:block">{html ? 'লাইভ প্রিভিউ' : 'এখনো কিছু তৈরি হয়নি'}</span><Button variant="ghost" size="icon" aria-label="প্রিভিউ রিফ্রেশ" title="প্রিভিউ রিফ্রেশ" onClick={() => setFrameKey(k => k + 1)}><RefreshCw /></Button></div><div className="flex min-h-0 flex-1 justify-center overflow-hidden bg-muted/30 p-3">{html ? <iframe key={frameKey} title="অ্যাপ প্রিভিউ" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals" className={`h-full w-full border bg-card ${device === 'mobile' ? 'max-w-[390px]' : device === 'tablet' ? 'max-w-[768px]' : ''}`} /> : <Empty icon={Code2} title={project.kind === 'next' ? 'Next.js source প্রস্তুত' : 'আপনার অ্যাপের স্টুডিও'} text={project.kind === 'next' ? 'পুরোনো Next.js ফাইল এখানে চালানো যায় না; ZIP নিয়ে চালান, অথবা চ্যাটে অনুরোধ দিন — এজেন্টরা চালু-যোগ্য অ্যাপ বানাবে।' : 'চ্যাটে আপনার অ্যাপের অনুরোধ লিখুন।'} action={<div className="flex flex-wrap justify-center gap-2"><Button onClick={project.kind === 'next' ? () => setView('files') : template}><Files />{project.kind === 'next' ? 'ফাইল খুলুন' : 'Next.js starter'}</Button><Button variant="outline" onClick={() => setView('tools')}><Wrench />সংযোগ</Button></div>} />}</div></>}
+        {view === 'terminal' && <div className="flex min-h-0 flex-1 flex-col bg-card/20 font-mono text-xs"><div className="min-h-0 flex-1 overflow-auto p-4 space-y-2">{!term.length && <p className="text-muted-foreground">NextBuild টার্মিনাল — এজেন্টের সব কমান্ড এখানে দেখা যাবে। আপনিও চালাতে পারেন। শুরু করতে <span className="text-primary">help</span> লিখুন।</p>}{term.map((l, i) => <div key={i}><p><span className={l.who === 'agent' ? 'text-primary' : 'text-success'}>{l.who === 'agent' ? 'agent' : 'you'} $</span> {l.cmd}</p><pre className={`whitespace-pre-wrap break-words pl-4 ${l.error ? 'text-destructive' : 'text-muted-foreground'}`}>{l.output.slice(0, 4000)}</pre></div>)}{busy && mode === 'shell' && streaming && <pre className="whitespace-pre-wrap break-words text-muted-foreground opacity-70">{streaming.slice(-1200)}</pre>}</div><form className="flex shrink-0 items-center gap-2 border-t p-2" onSubmit={e => { e.preventDefault(); const c = cmd.trim(); if (!c) return; if (c === 'clear') setTerm([]); else execScript(c, 'user'); setCmd(''); }}><span className="text-success">$</span><input aria-label="টার্মিনাল কমান্ড" value={cmd} onChange={e => setCmd(e.target.value)} disabled={busy} placeholder="ls, cat index.html, test, build…" className="min-w-0 flex-1 bg-transparent outline-none" /><Button type="submit" size="sm" variant="secondary" disabled={busy}>চালান</Button></form></div>}
         {view === 'logs' && <div className="min-h-0 flex-1 overflow-auto p-5"><h2 className="mb-4 text-sm font-semibold">কাজের লগ</h2>{(project.runs ?? []).slice().reverse().map(run => <section key={run.id} className="mb-6 space-y-2"><p className="text-xs text-primary">{run.goal} · {run.state}</p>{run.logs.map((log, i) => <p key={i} className="break-words font-mono text-xs text-muted-foreground">{log}</p>)}</section>)}{!project.runs?.length && <p className="text-xs text-muted-foreground">কোনো agent run নেই।</p>}</div>}
         {view === 'tools' && <div className="min-h-0 flex-1 overflow-auto p-5"><h2 className="mb-5 text-lg font-semibold">টুল সংযোগ</h2><div className="grid gap-3 xl:grid-cols-2">{TOOL_SERVICES.map(tool => <article key={tool.id} className="rounded-md border bg-card/30 p-3"><div className="flex items-start gap-2"><Wrench className="mt-1 h-4 w-4 text-muted-foreground" /><h3 className="flex-1 text-sm font-semibold">{tool.name}</h3><span className={`text-[10px] ${tool.status === 'local' ? 'text-success' : 'text-warning'}`}>{tool.status === 'local' ? 'প্রস্তুত' : 'সংযোগ বাকি'}</span></div><p className="mt-2 text-xs text-muted-foreground">{tool.detail}</p>{tool.status === 'local' && <Button variant="link" size="sm" onClick={() => setView('files')}>ফাইল খুলুন</Button>}</article>)}</div></div>}
         {view === 'history' && <div className="min-h-0 flex-1 overflow-auto p-5"><h2 className="mb-4 text-lg font-semibold">সংস্করণ ইতিহাস</h2>{currentRevision && <div className="mb-5 space-y-1"><p className="mb-2 text-xs text-muted-foreground">সর্বশেষ পরিবর্তন</p>{changes.map(c => <p key={c.path} className="font-mono text-xs"><span className="mr-2 text-primary">{c.kind === 'added' ? '+' : c.kind === 'deleted' ? '−' : '~'}</span>{c.path}</p>)}</div>}{(project.revisions ?? []).slice().reverse().map(revision => <div key={revision.id} className="flex flex-wrap items-center gap-3 border-t py-3"><div className="min-w-0 flex-1"><p className="text-sm">{revision.label}</p><p className="text-[10px] text-muted-foreground">{new Date(revision.createdAt).toLocaleString('bn-BD')} · {Object.keys(revision.files).length} files</p></div><Button variant="outline" size="sm" disabled={busy || currentRevision?.id === revision.id} onClick={() => { if (!protectDraft() || !confirm('এই সংস্করণ ফিরিয়ে আনবেন?')) return; const restored = restoreRevision(id, revision.id); assign(restored); setSelected(''); setDraft(''); setTabs([]); }}>ফিরিয়ে আনুন</Button></div>)}{!project.revisions?.length && <p className="text-xs text-muted-foreground">এখনো কোনো সংরক্ষিত সংস্করণ নেই।</p>}</div>}
