@@ -16,6 +16,6 @@ export const PROVIDERS: Provider[] = [
   { id: 'together', name: 'Together AI', baseUrl: 'https://api.together.xyz/v1', keyUrl: 'https://api.together.ai/settings/api-keys', note: 'Free মডেল', models: { planner: 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free', coder: 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free', quality: 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free', fast: 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free' } },
   { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', keyUrl: 'https://platform.deepseek.com/api_keys', note: 'খুব সস্তা', models: { planner: 'deepseek-chat', coder: 'deepseek-chat', quality: 'deepseek-chat', fast: 'deepseek-chat' } },
 ];
-export const BUILTIN_NAME = 'NextBuild বিল্ট-ইন AI';
+export const BUILTIN_NAME = 'Lovable AI (বিল্ট-ইন, key লাগবে না)';
 /** Free image generation without a key; agents use it as <img src>. */
 export const imageUrl = (prompt: string, w = 1024, h = 640) => `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true`;
