@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 
 export const publishApp = createServerFn({ method: 'POST' })
-  .inputValidator((d: unknown) => z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/), name: z.string().min(1).max(120), html: z.string().min(1).max(2_000_000), ownerKey: z.string().min(6).max(80) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ slug: z.string().regex(/^[a-z0-9-]{1,60}$/), name: z.string().min(1).max(120), html: z.string().min(1).max(2_000_000), ownerKey: z.string().min(1).max(120) }).parse(d))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
     const { data: existing } = await supabaseAdmin.from('published_apps').select('owner_key').eq('slug', data.slug).maybeSingle();
