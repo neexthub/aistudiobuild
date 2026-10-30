@@ -83,7 +83,7 @@ function Builder() {
       }
       const model = mode === "reason" ? MODELS.reason : MODELS.fast;
       setStage(`${model} কোড লিখছে…`);
-      const last = forModel[forModel.length - 1];
+      const last = forModel[forModel.length - 1]!;
       const prompt = plan ? [...forModel.slice(0, -1), { ...last, content: last.content + "\n\nএই পরিকল্পনা অনুসরণ করো:\n" + plan }] : forModel;
       const reply = await run(model, SYSTEM_PROMPT, prompt, ctrl.signal);
       const html = extractHtml(reply);

@@ -41,7 +41,7 @@ export function RichText({ text }: { text: string }) {
     <div className="space-y-2 text-sm leading-relaxed">
       {parts.map((p, i) => {
         const m = p.match(/^```([a-z]*)\n?([\s\S]*?)(```)?$/i);
-        if (m) return <CodeBlock key={i} lang={m[1] || "html"} code={m[2]} className="max-h-72" />;
+        if (m) return <CodeBlock key={i} lang={m[1] || "html"} code={m[2] ?? ""} className="max-h-72" />;
         return p.trim() ? <p key={i} className="whitespace-pre-wrap">{p.trim()}</p> : null;
       })}
     </div>

@@ -90,7 +90,7 @@ export function updateProject(id: string, patch: Partial<Omit<Project, "id" | "o
   const all = readFile("projects.json");
   const i = all.findIndex((p) => p.id === id);
   if (i < 0) return null;
-  const next = { ...all[i], ...patch, updatedAt: Date.now() };
+  const next = { ...all[i]!, ...patch, updatedAt: Date.now() } as Project;
   if (patch.name) next.slug = uniqueSlug(patch.name, id);
   all[i] = next;
   writeFile("projects.json", all);
