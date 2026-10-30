@@ -3,6 +3,7 @@ import { Bot, Camera, Loader2, Monitor, Play, Smartphone, Square, Wrench } from 
 import { Button } from '@/components/ui/button';
 import { bundleHtml, htmlPages } from '@/lib/project/bundle';
 import type { FileMap } from '@/lib/project/files';
+import h2c from 'html2canvas/dist/html2canvas.min.js?raw';
 
 type Log = { id: string; kind: 'info' | 'act' | 'error' | 'shot' | 'ok'; text: string; shot?: string | undefined };
 
@@ -19,10 +20,11 @@ if(d.nbT==='scan'){var t=targets();parent.postMessage({nbT:'scan',items:t.slice(
 if(d.nbT==='act'){var el=targets()[d.i];if(!el){parent.postMessage({nbT:'done',i:d.i,ok:false},'*');return}el.scrollIntoView({block:'center'});var r=el.getBoundingClientRect(),c=cursor();c.style.left=(r.left+r.width/2-10)+'px';c.style.top=(r.top+r.height/2-10)+'px';
 setTimeout(function(){try{var tag=el.tagName;if(tag==='INPUT'||tag==='TEXTAREA'){el.focus();if(el.type==='checkbox'||el.type==='radio')el.click();else{el.value=el.type==='number'?'5':el.type==='email'?'test@example.com':el.type==='date'?'2026-01-01':'পরীক্ষা';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))}}else if(tag==='SELECT'){el.selectedIndex=Math.min(1,el.options.length-1);el.dispatchEvent(new Event('change',{bubbles:true}))}else{el.click()}}catch(err){rep(err.message)}
 setTimeout(function(){parent.postMessage({nbT:'done',i:d.i,ok:true},'*')},500)},550)}
-if(d.nbT==='shot'){var go=function(){window.html2canvas(document.body,{scale:.5,logging:false,useCORS:true}).then(function(c){parent.postMessage({nbT:'shot',url:c.toDataURL('image/jpeg',.6)},'*')}).catch(function(err){rep('shot:'+err);parent.postMessage({nbT:'shot',url:''},'*')})};if(window.html2canvas)go();else{var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';s.onload=go;s.onerror=function(){parent.postMessage({nbT:'shot',url:''},'*')};document.head.appendChild(s)}}
+if(d.nbT==='shot'){var go=function(){window.html2canvas(document.body,{scale:.5,logging:false,useCORS:true}).then(function(c){parent.postMessage({nbT:'shot',url:c.toDataURL('image/jpeg',.6)},'*')}).catch(function(err){rep('shot:'+err);parent.postMessage({nbT:'shot',url:''},'*')})};if(window.html2canvas)go();else{rep('shot: html2canvas নেই');parent.postMessage({nbT:'shot',url:''},'*')}}
 });})();</script>`;
 
-const withAgent = (html: string) => /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + AGENT_SCRIPT) : AGENT_SCRIPT + html;
+const AGENT = `<script data-nb-h2c>${h2c.replace(/<\/script/gi, '<\\/script')}</script>` + AGENT_SCRIPT;
+const withAgent = (html: string) => /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + AGENT) : AGENT + html;
 
 /** Separate "AI live browser": runs its own copy of the app, clicks through every page, screenshots, collects errors, and can hand them to the fix agent. */
 export function AgentBrowser({ files, autoRun, busy, onFix, onManualFix, onReport }: { files: FileMap; autoRun: number; busy: boolean; onFix: (issues: string[]) => void; onManualFix: (issues: string[]) => void; onReport: (text: string) => void }) {
