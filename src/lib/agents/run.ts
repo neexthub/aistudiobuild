@@ -2,7 +2,7 @@ import { streamChat, withFallback } from '@/lib/ai';
 import { applyOperations, contentHash, type FileMap } from '@/lib/project/files';
 import { bundleHtml, testFiles } from '@/lib/project/bundle';
 import { CODER_SYSTEM, PLANNER_SYSTEM, QUALITY_SYSTEM } from './prompts';
-import { executePlan, jsonReply, parseFileBlocks, reviewSchema, validatePlan, type RunRecord } from './contracts';
+import { executePlan, jsonReply, parseFileBlocks, validatePlan, type RunRecord } from './contracts';
 
 const ctxOf = (files: FileMap, paths: string[], cap = 40000) => {
   const out: { path: string; hash: string; content: string }[] = []; let size = 0;
@@ -47,11 +47,14 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
       run.state = 'reviewing'; run.summary = `মান যাচাই এজেন্ট (রাউন্ড ${round})`; notify();
       const problems = testFiles(candidate);
       const review = await withFallback(async attempt => {
-      const reply = await streamChat({ attempt, role: 'quality', onProvider: provider('মান যাচাই এজেন্ট'), system: QUALITY_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, testProblems: problems, fileList: Object.keys(candidate), context: ctxOf(candidate, Object.keys(candidate), 50000) }) }], signal, format: 'json', onToken: () => {} });
-      return reviewSchema.parse(jsonReply(reply));
+      const reply = await streamChat({ attempt, role: 'quality', onProvider: provider('মান যাচাই এজেন্ট'), system: QUALITY_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, testProblems: problems, fileList: Object.keys(candidate), context: ctxOf(candidate, Object.keys(candidate), 50000) }) }], signal, onToken: () => {} });
+      const pass = /PASS:\s*(yes|হ্যাঁ|true)/i.exec(reply);
+      if (!pass && !/PASS:/i.test(reply)) throw new Error('মান যাচাইয়ের উত্তর বোঝা যায়নি');
+      const blocks = parseFileBlocks(reply);
+      return { pass: !!pass, summaryBn: blocks.summaryBn, issues: [...reply.matchAll(/^ISSUE:\s*(.+)$/gm)].map(m => m[1]!.trim()).slice(0, 20), files: blocks.files };
       }, signal, 3, retry('মান যাচাই এজেন্ট'));
       log(`মান যাচাই: ${review.summaryBn}${review.issues.length ? ' — ' + review.issues.join('; ') : ''}`);
-      const ops = review.operations.filter(op => op.op !== 'delete').map(op => candidate[op.path] === undefined ? { op: 'create' as const, path: op.path, content: 'content' in op ? op.content : '' } : { op: 'update' as const, path: op.path, expectedHash: contentHash(candidate[op.path] ?? ''), content: 'content' in op ? op.content : '' });
+      const ops = review.files.map(f => candidate[f.path] === undefined ? { op: 'create' as const, path: f.path, content: f.content } : { op: 'update' as const, path: f.path, expectedHash: contentHash(candidate[f.path] ?? ''), content: f.content });
       if (ops.length) { candidate = applyOperations(candidate, ops); log(`মান যাচাই এজেন্ট ${ops.length}টি ফাইল ঠিক করেছে।`); }
       if (review.pass && !ops.length && !problems.length) break;
     }
