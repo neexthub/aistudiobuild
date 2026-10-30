@@ -33,6 +33,7 @@ const taskNames = { queued: 'অপেক্ষায়', running: 'কাজ চ�
 function Builder() {
   const { id } = Route.useParams(), nav = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
+  const [live, setLive] = useState<Record<string, string>>({});
   const [input, setInput] = useState(''), [mode, setMode] = useState<'agents' | 'html'>('agents');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [streaming, setStreaming] = useState('');
   const [view, setView] = useState<View>('preview'), [panel, setPanel] = useState<'chat' | 'workspace'>('chat');
