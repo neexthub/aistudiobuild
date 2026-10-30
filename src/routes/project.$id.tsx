@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Bot, Code2, Eye, Globe, Loader2, RefreshCw, Send, Square, Files, Plus, Pencil, Trash2, Download, Monitor, Tablet, Smartphone, Terminal, Wrench, History, FileCode2, Search, X, Sparkles, Settings, CheckCircle2, Clock, AlertCircle, Paperclip, ImagePlus, Lightbulb } from 'lucide-react';
+import { ArrowLeft, Bot, Code2, Eye, Globe, Loader2, RefreshCw, Send, Square, Files, Plus, Pencil, Trash2, Download, Monitor, Tablet, Smartphone, Terminal, Wrench, History, FileCode2, Search, X, Sparkles, Settings, CheckCircle2, Clock, AlertCircle, Paperclip, ImagePlus, Lightbulb, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Logo, StatusDot } from '@/components/StatusDot';
 import { RichText } from '@/components/CodeBlock';
