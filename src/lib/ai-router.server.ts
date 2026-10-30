@@ -1,29 +1,38 @@
 // Server-only multi-provider router. Lovable AI is tried first (fast + high
 // quality); if it is busy or out of credit, keys from the shared free pool are
 // rotated with cooldowns, falling back across providers.
-import { PROVIDERS, type AgentRole } from './providers';
+import { PROVIDERS, LOVABLE_PROVIDER, BUILTIN_MODELS, type AgentRole } from './providers';
 
 export type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
 type Msg = { role: string; content: string | Part[] };
 type Candidate = { label: string; url: string; key: string; model: string; keyId?: string; vision: boolean; builtin?: boolean };
-export const BUILTIN_MODELS: Record<AgentRole, string> = { planner: 'google/gemini-3.8-flash', coder: 'google/gemini-3.8-flash', quality: 'google/gemini-3.8-flash', fast: 'google/gemini-3.1-flash-lite' };
+// Models and the Lovable entry live in the client-safe registry so settings and the router always agree.
+export { BUILTIN_MODELS, LOVABLE_PROVIDER } from './providers';
 
 async function admin() { return (await import('@/integrations/supabase/client.server')).supabaseAdmin; }
 
 export async function candidates(role: AgentRole): Promise<Candidate[]> {
   const out: Candidate[] = [];
-  const lk = process.env['LOVABLE_API_KEY'];
+  const envKey = process.env['LOVABLE_API_KEY'];
   try {
     const db = await admin();
     const { data } = await db.from('ai_keys').select('id, provider, api_key, cooldown_until, use_count').order('use_count', { ascending: true });
     const now = Date.now();
-    if (lk) {
-      // Lovable AI status lives in a marker row (provider 'lovable', no real key stored) so settings can show it.
-      let row = (data ?? []).find(k => k.provider === 'lovable');
-      if (!row) { const ins = await db.from('ai_keys').insert({ provider: 'lovable', api_key: 'builtin', label: 'Lovable AI (ডিফল্ট)' }).select('id, provider, api_key, cooldown_until, use_count').single(); row = ins.data ?? undefined; }
-      if (!row?.cooldown_until || new Date(row.cooldown_until).getTime() <= now) out.push({ label: `Lovable AI · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role], vision: true, ...(row?.id ? { keyId: row.id } : {}), builtin: true });
+    const lovable = (data ?? []).filter(k => k.provider === 'lovable');
+    if (envKey) {
+      // The project's own key runs first; its live status lives in a marker row (api_key 'builtin').
+      let marker = lovable.find(k => k.api_key === 'builtin');
+      if (!marker) { const ins = await db.from('ai_keys').insert({ provider: 'lovable', api_key: 'builtin', label: 'Lovable AI (ডিফল্ট)' }).select('id, provider, api_key, cooldown_until, use_count').single(); marker = ins.data ?? undefined; }
+      if (!marker?.cooldown_until || new Date(marker.cooldown_until).getTime() <= now) out.push({ label: `${LOVABLE_PROVIDER.name} · ${BUILTIN_MODELS[role]}`, url: `${LOVABLE_PROVIDER.baseUrl}/chat/completions`, key: envKey, model: BUILTIN_MODELS[role], vision: true, ...(marker?.id ? { keyId: marker.id } : {}), builtin: true });
+    }
+    // A key pasted in settings: same gateway, billed to that user's own workspace.
+    for (const k of lovable) {
+      if (!k.api_key || k.api_key === 'builtin') continue;
+      if (k.cooldown_until && new Date(k.cooldown_until).getTime() > now) continue;
+      out.push({ label: `${LOVABLE_PROVIDER.name} · ${BUILTIN_MODELS[role]}`, url: `${LOVABLE_PROVIDER.baseUrl}/chat/completions`, key: k.api_key, model: BUILTIN_MODELS[role], keyId: k.id, vision: true });
     }
     for (const k of data ?? []) {
+      if (k.provider === 'lovable') continue;
       if (k.cooldown_until && new Date(k.cooldown_until).getTime() > now) continue;
       const p = PROVIDERS.find(x => x.id === k.provider); if (!p) continue;
       out.push({ label: `${p.name} · ${p.models[role]}`, url: `${p.baseUrl}/chat/completions`, key: k.api_key, model: p.models[role], keyId: k.id, vision: p.id === 'gemini' });
@@ -37,7 +46,9 @@ export function orderCandidates<T extends { keyId?: string; label: string; built
   const builtin = list.filter(c => c.builtin || !c.keyId), pool = list.filter(c => !c.builtin && c.keyId);
   const groups = new Map<string, T[]>();
   for (const c of pool) { const p = c.label.split(' · ')[0]!; groups.set(p, [...(groups.get(p) ?? []), c]); }
-  return [...builtin, ...[...groups.values()].flat()].slice(0, 24);
+  // The user's own Lovable key goes right after the built-in one, before other providers.
+  const names = [...groups.keys()].sort((a, b) => (a === LOVABLE_PROVIDER.name ? -1 : b === LOVABLE_PROVIDER.name ? 1 : 0));
+  return [...builtin, ...names.flatMap(n => groups.get(n)!)].slice(0, 24);
 }
 
 /** User-facing message once every model failed twice. */
