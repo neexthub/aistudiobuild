@@ -78,6 +78,7 @@ function bundleNext(files: FileMap): string {
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+<script>window.react=window.React;</script>
 <script src="https://unpkg.com/lucide-react@0.460.0/dist/umd/lucide-react.min.js"></script>
 <style>${css.join('\n').replace(/<\/style/gi, '<\\/style')}</style></head><body><div id="root"></div>
 <script>
