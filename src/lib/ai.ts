@@ -50,8 +50,32 @@ export async function generateImage(prompt: string, signal?: AbortSignal, kind: 
   return j.url;
 }
 
-/** Streams a chat reply via the server router. Aborts if no token arrives for `idleMs`. */
-export async function streamChat(opts: {
+type StreamOpts = Parameters<typeof streamOnce>[0];
+/**
+ * Streams a chat reply. If a model fails or stalls mid-answer, the next model
+ * resumes from the partial text (it is told to continue exactly where it stopped).
+ * Terminal errors (credits, access denied, bad request) and user Stop are not retried.
+ */
+export async function streamChat(opts: StreamOpts & { resumes?: number }): Promise<string> {
+  let full = '', attempt = opts.attempt ?? 0;
+  const max = opts.resumes ?? 3;
+  for (let i = 0; ; i++) {
+    const messages = full ? [...opts.messages, { role: 'assistant' as const, content: full }, { role: 'user' as const, content: 'আগের মডেল মাঝপথে থেমে গেছে। ঠিক যেখানে থেমেছে সেখান থেকে বাকি অংশ লেখো — আগের লেখা পুনরাবৃত্তি করবে না, কোনো ভূমিকা দেবে না।' }] : opts.messages;
+    try {
+      const part = await streamOnce({ ...opts, attempt, messages, images: full ? [] : (opts.images ?? []), onToken: t => { full += t; opts.onToken(t); } });
+      void part; return full;
+    } catch (e) {
+      const msg = (e as Error).message ?? '';
+      if (opts.signal?.aborted || i >= max || /\b(400|401|402|403)\b|ক্রেডিট|credit|denied|অনুমতি/i.test(msg)) throw e;
+      opts.onProvider?.(`⚠ মডেল থেমে গেছে — পরের মডেলে ${full ? 'বাকি অংশ চালু (resume)' : 'আবার চেষ্টা'}…`);
+      attempt++;
+      await new Promise(r => setTimeout(r, 600 * (i + 1)));
+    }
+  }
+}
+
+/** One streamed request via the server router. Aborts if no token arrives for `idleMs`. */
+async function streamOnce(opts: {
   role: AgentRole;
   onProvider?: (label: string) => void;
   system: string;
