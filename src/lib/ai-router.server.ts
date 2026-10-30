@@ -22,7 +22,7 @@ export async function candidates(role: AgentRole): Promise<Candidate[]> {
     }
   } catch (e) { console.error('key pool read failed', e); }
   const lk = process.env['LOVABLE_API_KEY'];
-  if (lk) out.push({ label: `বিল্ট-ইন · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role] });
+  if (lk) out.push({ label: `Lovable AI · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role] });
   return out;
 }
 
@@ -45,7 +45,9 @@ export async function openStream(role: AgentRole, messages: Msg[], json: boolean
   const list = await candidates(role);
   if (!list.length) throw new Error('কোনো AI প্রোভাইডার পাওয়া যায়নি। সেটিংসে API key যোগ করুন।');
   const errors: string[] = [];
-  for (const c of list.slice(0, 8)) {
+  const pool = list.filter(c => c.keyId).slice(0, 7);
+  const tries = [...pool, ...list.filter(c => !c.keyId)];
+  for (const c of tries) {
     try {
       const r = await fetch(c.url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.key}` }, body: JSON.stringify({ model: c.model, messages, stream: true, temperature: 0.3, ...(json ? { response_format: { type: 'json_object' } } : {}) }) });
       if (r.ok && r.body) { void mark(c.keyId, true); return { body: r.body, label: c.label }; }
