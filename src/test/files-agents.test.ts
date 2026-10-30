@@ -44,7 +44,8 @@ describe('file operations', () => {
     expect(Object.keys(zip)).toEqual(expect.arrayContaining(['index.html', 'about.html', 'css/style.css', 'js/app.js']));
     expect(testFiles(files)).toEqual([]);
     const html = bundleHtml(files)!;
-    expect(html).toContain('__nbPages');
+    expect(html).toContain('data-nb-runtime');
+    expect(bundleHtml(files, 'index.html', {}, true)).toContain('__nbPages');
     expect(html).not.toContain('href="css/style.css"');
   });
   it('flags missing linked pages', () => {

@@ -190,8 +190,8 @@ function Builder() {
     if (!html) return; setPublishing(true); setError('');
     try {
       const owner = (currentUser()?.id ?? 'guest') + '-' + project.id; let slug = project.slug;
-      let r = await publishApp({ data: { slug, name: project.name, html, ownerKey: owner } });
-      if (!r.ok) { slug = `${project.slug}-${Math.random().toString(36).slice(2, 6)}`; r = await publishApp({ data: { slug, name: project.name, html, ownerKey: owner } }); }
+      let r = await publishApp({ data: { slug, name: project.name, html: bundleHtml(files, 'index.html', {}, true) ?? html, ownerKey: owner } });
+      if (!r.ok) { slug = `${project.slug}-${Math.random().toString(36).slice(2, 6)}`; r = await publishApp({ data: { slug, name: project.name, html: bundleHtml(files, 'index.html', {}, true) ?? html, ownerKey: owner } }); }
       if (!r.ok) throw new Error('এই নাম ব্যবহৃত');
       const u = updateProject(id, { slug, published: true }); if (u) assign(u);
       setPublishedUrl(`${window.location.origin}/p/${slug}`);
