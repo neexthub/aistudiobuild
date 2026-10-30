@@ -73,6 +73,7 @@ export function sseToNdjson(body: ReadableStream<Uint8Array>, label: string): Re
     async pull(c) {
       if (!sent) { sent = true; c.enqueue(enc.encode(JSON.stringify({ provider: label }) + '\n')); return; }
       try {
+        for (;;) {
         const { done, value } = await reader.read();
         if (done) { c.close(); return; }
         buf += dec.decode(value, { stream: true });
@@ -83,7 +84,9 @@ export function sseToNdjson(body: ReadableStream<Uint8Array>, label: string): Re
           const d = t.slice(5).trim(); if (d === '[DONE]') continue;
           try { const j = JSON.parse(d); const tok = j.choices?.[0]?.delta?.content; if (tok) out += JSON.stringify({ message: { content: tok } }) + '\n'; } catch { /* partial */ }
         }
-        if (out) c.enqueue(enc.encode(out));
+        // Keep reading until there is something to send: a pull that enqueues nothing stalls the stream.
+        if (out) { c.enqueue(enc.encode(out)); return; }
+        }
       } catch { try { c.close(); } catch { /* closed */ } }
     },
     cancel() { reader.cancel().catch(() => {}); },
