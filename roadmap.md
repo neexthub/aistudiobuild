@@ -15,3 +15,4 @@
 - [x] Lovable-style inline work steps in chat (read/edit/run, click for details)
 - [x] Auto-switch mid-stream
 - [x] Auto-switch model on failure/stall in every agent step
+- [x] Uploaded CSV keys set as default shared keys

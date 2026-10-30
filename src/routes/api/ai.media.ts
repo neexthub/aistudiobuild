@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 
-const genSchema = z.object({ prompt: z.string().trim().min(2).max(2000) }).strict();
+const genSchema = z.object({ prompt: z.string().trim().min(2).max(2000), kind: z.enum(['image', 'icon', 'audio']).optional() }).strict();
 const ALLOWED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
 export const Route = createFileRoute('/api/ai/media')({
@@ -10,7 +10,7 @@ export const Route = createFileRoute('/api/ai/media')({
       // multipart upload (field "file") → stores image and returns its link;
       // JSON {prompt} → generates an image with AI and returns its link.
       POST: async ({ request }) => {
-        const { generateImage, storeMedia } = await import('@/lib/media.server');
+        const { generateImage, generateSpeech, storeMedia } = await import('@/lib/media.server');
         try {
           if ((request.headers.get('content-type') ?? '').includes('multipart/form-data')) {
             const form = await request.formData();
@@ -21,7 +21,9 @@ export const Route = createFileRoute('/api/ai/media')({
           }
           const parsed = genSchema.safeParse(await request.json().catch(() => null));
           if (!parsed.success) return Response.json({ error: 'ছবির বর্ণনা লিখুন।' }, { status: 400 });
-          return Response.json({ url: await generateImage(parsed.data.prompt, request.signal) });
+          const { prompt, kind } = parsed.data;
+          if (kind === 'audio') return Response.json({ url: await generateSpeech(prompt, request.signal) });
+          return Response.json({ url: await generateImage(kind === 'icon' ? `App icon, flat vector style, centered single symbol, rounded square, simple bold shapes, no text: ${prompt}` : prompt, request.signal) });
         } catch (e) {
           const status = (e as { status?: number }).status ?? 502;
           return Response.json({ error: (e as Error).message }, { status: status >= 400 && status < 600 ? status : 502 });

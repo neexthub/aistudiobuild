@@ -3,7 +3,7 @@
 import { applyOperations, contentHash, legacyFiles, validateFiles, type FileMap, type FileOperation, type Revision } from './project/files';
 import type { RunRecord } from './agents/contracts';
 export type User = { id: string; name: string; email: string; pass: string; createdAt: number };
-export type ChatMsg = { role: "user" | "assistant"; content: string; model?: string; images?: string[]; steps?: import("@/components/studio/WorkSteps").Step[] };
+export type ChatMsg = { role: "user" | "assistant"; content: string; model?: string; images?: string[]; audio?: string; steps?: import("@/components/studio/WorkSteps").Step[] };
 export type Project = {
   id: string;
   ownerId: string;
