@@ -22,5 +22,6 @@
 - [x] Files appear live in file manager while AI writes; preview opens after run
 ## Lovable API + OpenAI (Oct 31)
 - [x] Settings: add your own Lovable AI key (with how-to-get steps); runs right after the built-in key
-- [ ] OpenAI models added: own-key provider + OpenAI models through Lovable AI; live-verify each
-- [ ] Live browser check: settings dropdown, Lovable help box, live key status, one full build
+- [x] OpenAI models added: own-key provider + OpenAI models through the built-in Lovable key
+- [x] Live browser check: settings dropdown (13 providers), Lovable how-to box, OpenAI how-to, live key status
+- [ ] One full multi-file build re-run after the router's new built-in OpenAI candidate
