@@ -104,7 +104,7 @@ export function sseToNdjson(body: ReadableStream<Uint8Array>, label: string): Re
         for (const line of lines) {
           const t = line.trim(); if (!t.startsWith('data:')) continue;
           const d = t.slice(5).trim(); if (d === '[DONE]') { finished = true; continue; }
-          try { const j = JSON.parse(d); if (j.choices?.[0]?.finish_reason) finished = true; const tok = j.choices?.[0]?.delta?.content; if (tok) out += JSON.stringify({ message: { content: tok } }) + '\n'; } catch { /* partial */ }
+          try { const j = JSON.parse(d); { const fr = j.choices?.[0]?.finish_reason; if (fr && fr !== 'length') finished = true; } const tok = j.choices?.[0]?.delta?.content; if (tok) out += JSON.stringify({ message: { content: tok } }) + '\n'; } catch { /* partial */ }
         }
         // Keep reading until there is something to send: a pull that enqueues nothing stalls the stream.
         if (out) { c.enqueue(enc.encode(out)); return; }
