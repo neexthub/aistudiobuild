@@ -54,10 +54,10 @@ function Home() {
           </p>
           <div className="grid grid-cols-2 gap-3">
             {[
-              [Bot, "বাংলা AI এজেন্ট"],
-              [Zap, "লাইভ প্রিভিউ"],
-              [Database, "ফাইল-ভিত্তিক ডেটা"],
-              [Globe, "সাব-পাথে পাবলিশ"],
+              [Bot, "মাল্টি-এজেন্ট বিল্ড"],
+              [Zap, "বহু-পাতার লাইভ প্রিভিউ"],
+              [Database, "অনলাইন সার্চ ও ছবি"],
+              [Globe, "এক ক্লিকে পাবলিশ"],
             ].map(([I, t], i) => {
               const Icon = I as typeof Bot;
               return (
