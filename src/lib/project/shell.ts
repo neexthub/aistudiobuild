@@ -8,9 +8,9 @@ export const SHELL_HELP = `কমান্ড: ls · tree · cat <file> · touch
 export function parseScript(script: string): { line: string; body?: string }[] {
   const lines = script.replace(/\r/g, '').split('\n'), out: { line: string; body?: string }[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim(); if (!line || line.startsWith('#')) continue;
+    const line = (lines[i] ?? '').trim(); if (!line || line.startsWith('#')) continue;
     const m = line.match(/^(.*?)\s*<<\s*'?(\w+)'?$/);
-    if (m) { const body: string[] = []; i++; while (i < lines.length && lines[i].trim() !== m[2]) body.push(lines[i++]); out.push({ line: m[1], body: body.join('\n') }); }
+    if (m) { const body: string[] = []; i++; while (i < lines.length && (lines[i] ?? '').trim() !== m[2]) body.push(lines[i++] ?? ''); out.push({ line: m[1] ?? '', body: body.join('\n') }); }
     else out.push({ line });
   }
   return out;
@@ -34,7 +34,7 @@ export function runCommand(files: FileMap, line: string, body?: string): ShellRe
     case 'append': { const old = need(); return apply([{ op: 'update', path: a, expectedHash: contentHash(old), content: old + (body ?? args.slice(1).join(' ')) + '\n' }], `~ ${a} (যোগ)`); }
     case 'replace': { const old = need(), [from, to] = (body ?? '').split(/\n---\n/); if (!from || to === undefined || !old.includes(from)) throw new Error(`replace: পুরোনো লেখা পাওয়া যায়নি ${a}-এ`); return apply([{ op: 'update', path: a, expectedHash: contentHash(old), content: old.replace(from, to) }], `~ ${a} (প্রতিস্থাপন)`); }
     case 'rm': return apply([{ op: 'delete', path: a, expectedHash: contentHash(need()) }], `− ${a}`);
-    case 'mv': { const c = need(); return apply([{ op: 'create', path: args[1], content: c }, { op: 'delete', path: a, expectedHash: contentHash(c) }], `${a} → ${args[1]}`); }
+    case 'mv': { const c = need(); return apply([{ op: 'create', path: args[1] ?? '', content: c }, { op: 'delete', path: a, expectedHash: contentHash(c) }], `${a} → ${args[1]}`); }
     case 'test': { const issues = testFiles(files); return ok(issues.length ? '✗ ' + issues.join('\n✗ ') : '✓ সব স্ট্যাটিক টেস্ট পাস'); }
     case 'build': { const html = bundleHtml(files); return ok(html ? `✓ বিল্ড সফল (${(html.length / 1024).toFixed(1)} KB)` : '✗ index.html নেই, বিল্ড হয়নি'); }
     default: throw new Error(`অজানা কমান্ড: ${cmd} — help লিখুন`);
