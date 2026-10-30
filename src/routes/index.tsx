@@ -45,7 +45,7 @@ function Home() {
       </header>
       <main className="mx-auto grid max-w-6xl gap-12 px-5 py-10 lg:grid-cols-2 lg:py-20">
         <section className="space-y-6">
-          <span className="inline-block rounded-full border border-primary/30 px-3 py-1 text-xs text-primary">দুইটি AI মডেল · নিজস্ব সার্ভার</span>
+          <span className="inline-block rounded-full border border-primary/30 px-3 py-1 text-xs text-primary">Lovable AI + ফ্রি মডেল · অটো ফেইলওভার</span>
           <h1 className="font-display text-4xl font-bold leading-tight md:text-6xl">
             কথা বলুন,<br /><span className="text-primary">অ্যাপ তৈরি</span> হয়ে যাবে।
           </h1>
@@ -54,10 +54,10 @@ function Home() {
           </p>
           <div className="grid grid-cols-2 gap-3">
             {[
-              [Bot, "বাংলা AI এজেন্ট"],
-              [Zap, "লাইভ প্রিভিউ"],
-              [Database, "ফাইল-ভিত্তিক ডেটা"],
-              [Globe, "সাব-পাথে পাবলিশ"],
+              [Bot, "মাল্টি-এজেন্ট বিল্ড"],
+              [Zap, "বহু-পাতার লাইভ প্রিভিউ"],
+              [Database, "অনলাইন সার্চ ও ছবি"],
+              [Globe, "এক ক্লিকে পাবলিশ"],
             ].map(([I, t], i) => {
               const Icon = I as typeof Bot;
               return (

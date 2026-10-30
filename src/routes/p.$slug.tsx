@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getPublished } from "@/lib/store";
 import { getPublishedApp } from "@/lib/publish.functions";
+import { withRuntime } from "@/lib/project/bundle";
 
 export const Route = createFileRoute("/p/$slug")({
   head: ({ params }) => ({
@@ -20,6 +21,8 @@ export const Route = createFileRoute("/p/$slug")({
 function Published() {
   const { slug } = Route.useParams();
   const [html, setHtml] = useState<string | null | undefined>(undefined);
+  const [page, setPage] = useState<string | null>(null);
+  useEffect(() => { const on = (e: MessageEvent) => { const d = e.data as { nbNav?: unknown; store?: unknown; pages?: unknown }; if (typeof d?.nbNav !== 'string' || !d.pages || typeof d.pages !== 'object') return; const map = d.pages as Record<string, string>; const target = map[d.nbNav]; if (typeof target === 'string') setPage(withRuntime(target, map, (d.store ?? {}) as Record<string, string>)); }; window.addEventListener('message', on); return () => window.removeEventListener('message', on); }, []);
   useEffect(() => { let live = true; getPublishedApp({ data: { slug } }).then(r => { if (live) setHtml(r?.html ?? getPublished(slug)?.publishedHtml ?? null); }).catch(() => { if (live) setHtml(getPublished(slug)?.publishedHtml ?? null); }); return () => { live = false; }; }, [slug]);
 
   if (html === undefined) return <div className="flex min-h-screen items-center justify-center text-muted-foreground">লোড হচ্ছে…</div>;
@@ -33,6 +36,6 @@ function Published() {
     );
   // Isolated from NextBuild's own storage; a memory shim keeps apps that use localStorage working.
   const shim = '<script>try{window.localStorage.getItem("x")}catch(e){var m={};var s={getItem:function(k){return k in m?m[k]:null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){m={}},key:function(i){return Object.keys(m)[i]||null},get length(){return Object.keys(m).length}};Object.defineProperty(window,"localStorage",{value:s});Object.defineProperty(window,"sessionStorage",{value:s})}</script>';
-  const doc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + shim) : shim + html;
+  const doc = page ?? (/<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + shim) : shim + html);
   return <iframe title={slug} srcDoc={doc} className="h-screen w-full border-0" sandbox="allow-scripts allow-forms allow-modals allow-popups" />;
 }

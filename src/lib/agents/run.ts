@@ -1,4 +1,4 @@
-import { streamChat, withFallback } from '@/lib/ai';
+import { streamChat, webSearch, withFallback } from '@/lib/ai';
 import { applyOperations, contentHash, type FileMap } from '@/lib/project/files';
 import { bundleHtml, testFiles } from '@/lib/project/bundle';
 import { CODER_SYSTEM, PLANNER_SYSTEM, QUALITY_SYSTEM } from './prompts';
@@ -10,19 +10,25 @@ const ctxOf = (files: FileMap, paths: string[], cap = 40000) => {
   return out;
 };
 
+/** Per-attempt time budget so one slow model cannot block the whole build; the next attempt moves to another model. */
+const timed = (signal: AbortSignal, ms: number) => AbortSignal.any([signal, AbortSignal.timeout(ms)]);
+
 /** Planner → parallel coders → quality agent (fix loop) → test agent → build agent. */
-export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[] } = {}): Promise<{ files: FileMap; html: string }> {
+export async function buildWithAgents(goal: string, files: FileMap, signal: AbortSignal, changed: (run: RunRecord) => void, token: (value: string) => void, extra: { images?: string[]; memory?: string; assets?: string[]; onDraft?: (files: FileMap) => void; onLive?: (path: string, content: string) => void } = {}): Promise<{ files: FileMap; html: string }> {
   let run: RunRecord = { id: crypto.randomUUID(), createdAt: Date.now(), goal, state: 'planning', summary: 'পরিকল্পনা এজেন্ট কাজ ভাগ করছে', tasks: [], logs: [] };
   const notify = () => changed(structuredClone(run));
   const log = (m: string) => { run.logs.push(m); notify(); };
   const provider = (who: string) => (label: string) => log(`${who} → ${label}`);
-  const shared = { chatMemory: extra.memory || undefined, imageLinks: [...(extra.images ?? []), ...(extra.assets ?? [])] };
+  const shared: Record<string, unknown> = { chatMemory: extra.memory || undefined, imageLinks: [...(extra.images ?? []), ...(extra.assets ?? [])] };
   notify();
   try {
+    const found = await webSearch(goal.slice(0, 200), signal);
+    if (found.results.length) { shared['webNotes'] = found.results.map(r => `${r.title}: ${r.snippet} (${r.url})`).join('\n').slice(0, 3000); log(`সার্চ এজেন্ট: অনলাইনে ${found.results.length}টি ফল পাওয়া গেছে (${found.source})`); }
+    else log('সার্চ এজেন্ট: অনলাইনে প্রাসঙ্গিক ফল পাওয়া যায়নি — নিজের জ্ঞানে এগোনো হচ্ছে');
     const retry = (who: string) => (n: number, e: unknown) => log(`${who}: উত্তর ব্যবহারযোগ্য হয়নি (${e instanceof Error ? e.message.slice(0, 80) : 'ত্রুটি'}) — অন্য মডেলে আবার চেষ্টা #${n}`);
     const plan = await withFallback(async attempt => {
     let planText = '';
-    const planText2 = await streamChat({ attempt, role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images ?? [], format: 'json', signal, onToken: t => { planText += t; token(planText); } });
+    const planText2 = await streamChat({ attempt, role: 'planner', onProvider: provider('পরিকল্পনা এজেন্ট'), system: PLANNER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, files: Object.keys(files), ...shared }) }], images: extra.images ?? [], format: 'json', signal: timed(signal, 90_000), onToken: t => { planText += t; token(planText); } });
     return validatePlan(jsonReply(planText2));
     }, signal, 6, retry('পরিকল্পনা এজেন্ট'));
     let candidate = { ...files };
@@ -31,7 +37,8 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
     await executePlan(plan, signal, async task => {
       const context = ctxOf(candidate, [...new Set([...task.readPaths, ...task.writePaths])]);
       const result = await withFallback(async attempt => {
-      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal, onToken: () => {} });
+      let live = '', last = 0;
+      const reply = await streamChat({ attempt, role: 'coder', onProvider: provider(task.id), system: CODER_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, task, fileList: Object.keys(candidate), context, ...shared }) }], signal: timed(signal, 150_000), onToken: t => { if (!extra.onLive) return; live += t; const now = Date.now(); if (now - last < 400) return; last = now; const m = [...live.matchAll(/<<<FILE\s+([^>\s]+)\s*>>>\r?\n([\s\S]*?)(?=<<<END>>>|$)/g)].at(-1); if (m && task.writePaths.includes(m[1]!)) extra.onLive(m[1]!, m[2]!); } });
       const parsed = parseFileBlocks(reply);
       const mine = parsed.files.filter(f => task.writePaths.includes(f.path));
       if (!mine.length) throw new Error('নির্ধারিত ফাইল পাওয়া যায়নি');
@@ -42,23 +49,24 @@ export async function buildWithAgents(goal: string, files: FileMap, signal: Abor
       log(`${task.id}: ${result.summaryBn}`);
     }, (id, state) => { run.tasks = run.tasks.map(task => task.id === id ? { ...task, state } : task); notify(); });
 
+    extra.onDraft?.(candidate); log('প্রিভিউ: খসড়া অ্যাপ প্রিভিউতে দেখানো হচ্ছে, মান যাচাই চলছে।');
     // Quality + test loop: up to 2 repair rounds.
     for (let round = 1; round <= 2; round++) {
       run.state = 'reviewing'; run.summary = `মান যাচাই এজেন্ট (রাউন্ড ${round})`; notify();
       const problems = testFiles(candidate);
       let review: { pass: boolean; summaryBn: string; issues: string[]; files: { path: string; content: string }[] };
       try { review = await withFallback(async attempt => {
-      const reply = await streamChat({ attempt, role: 'quality', onProvider: provider('মান যাচাই এজেন্ট'), system: QUALITY_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, testProblems: problems, fileList: Object.keys(candidate), context: ctxOf(candidate, Object.keys(candidate), 50000) }) }], signal, onToken: () => {} });
+      const reply = await streamChat({ attempt, role: 'quality', onProvider: provider('মান যাচাই এজেন্ট'), system: QUALITY_SYSTEM, messages: [{ role: 'user', content: JSON.stringify({ goal, testProblems: problems, fileList: Object.keys(candidate), context: ctxOf(candidate, Object.keys(candidate), 30000) }) }], signal: timed(signal, 120_000), onToken: () => {} });
       const pass = /PASS:\s*(yes|হ্যাঁ|true)/i.exec(reply);
       if (!pass && !/PASS:/i.test(reply)) throw new Error('মান যাচাইয়ের উত্তর বোঝা যায়নি');
       const blocks = parseFileBlocks(reply);
       return { pass: !!pass, summaryBn: blocks.summaryBn, issues: [...reply.matchAll(/^ISSUE:\s*(.+)$/gm)].map(m => m[1]!.trim()).slice(0, 20), files: blocks.files };
-      }, signal, 5, retry('মান যাচাই এজেন্ট')); }
+      }, signal, 3, retry('মান যাচাই এজেন্ট')); }
       catch (e) { if (signal.aborted) throw e; log('মান যাচাই এজেন্ট সব মডেলে ব্যর্থ — কাজ থামানো হয়নি, তৈরি ফাইল নিয়ে এগোনো হচ্ছে।'); break; }
       log(`মান যাচাই: ${review.summaryBn}${review.issues.length ? ' — ' + review.issues.join('; ') : ''}`);
       const ops = review.files.map(f => candidate[f.path] === undefined ? { op: 'create' as const, path: f.path, content: f.content } : { op: 'update' as const, path: f.path, expectedHash: contentHash(candidate[f.path] ?? ''), content: f.content });
       if (ops.length) { candidate = applyOperations(candidate, ops); log(`মান যাচাই এজেন্ট ${ops.length}টি ফাইল ঠিক করেছে।`); }
-      if (review.pass && !ops.length && !problems.length) break;
+      if ((review.pass && !ops.length) || !testFiles(candidate).length) break;
     }
     const remaining = testFiles(candidate);
     log(remaining.length ? `টেস্ট এজেন্ট: ${remaining.length}টি সমস্যা বাকি — ${remaining.join('; ')}` : 'টেস্ট এজেন্ট: সব স্ট্যাটিক পরীক্ষা পাস।');

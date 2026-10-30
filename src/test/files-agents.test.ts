@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { applyOperations, contentHash, validPath, validateFiles } from '@/lib/project/files';
 import { createProject, editProjectFiles, getProject, migrateProject, restoreRevision, saveProjectFiles, updateProject } from '@/lib/store';
 import { executePlan, AGENT_ROLES, validatePlan } from '@/lib/agents/contracts';
-import { nextTemplate } from '@/lib/project/template';
+import { htmlTemplate } from '@/lib/project/template';
+import { bundleHtml, testFiles } from '@/lib/project/bundle';
 import { sourceZip } from '@/lib/project/export';
 import { unzipSync, strFromU8 } from 'fflate';
 const task = (id: string, dependsOn: string[] = []) => ({ id, role: 'builder', objective: 'Build module', dependsOn, readPaths: [], writePaths: [`components/${id}.tsx`], acceptanceChecks: ['Module exports component'] });
@@ -37,14 +38,18 @@ describe('file operations', () => {
     restoreRevision(p.id, revision.id);
     expect(getProject(p.id)?.files).toEqual({ 'a.ts': 'one' });
   });
-  it('bounds source volume and includes a reproducible Next template in ZIP', () => {
+  it('bounds source volume and ships a multi-page HTML template in ZIP', () => {
     expect(() => validateFiles({ 'a.txt': 'x'.repeat(2_000_001) })).toThrow();
-    const files = nextTemplate(), zip = unzipSync(sourceZip(files));
-    expect(Object.keys(zip)).toContain('package-lock.json');
-    expect(strFromU8(zip['app/page.tsx'] ?? new Uint8Array())).toContain('Counter');
-    const manifest = JSON.parse(files['package.json'] ?? '{}'), lock = JSON.parse(files['package-lock.json'] ?? '{}');
-    expect(lock.packages[''].dependencies).toEqual(manifest.dependencies);
-    expect(manifest.dependencies.next).toBe('16.4.3');
+    const files = htmlTemplate(), zip = unzipSync(sourceZip(files));
+    expect(Object.keys(zip)).toEqual(expect.arrayContaining(['index.html', 'about.html', 'css/style.css', 'js/app.js']));
+    expect(testFiles(files)).toEqual([]);
+    const html = bundleHtml(files)!;
+    expect(html).toContain('data-nb-runtime');
+    expect(bundleHtml(files, 'index.html', {}, true)).toContain('__nbPages');
+    expect(html).not.toContain('href="css/style.css"');
+  });
+  it('flags missing linked pages', () => {
+    expect(testFiles({ 'index.html': '<html><a href="x.html">x</a></html>' })).toContain('index.html: x.html ফাইল নেই');
   });
 });
 describe('agent orchestration', () => {

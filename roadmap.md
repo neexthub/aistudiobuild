@@ -3,8 +3,8 @@
 - [x] Review old chat and current remix; identify actual feature gaps.
 - [x] Restore missing client dependency and run existing tests.
 - [x] Deliver detailed master prompt, safe VPS guide, and phased implementation plan.
-- [ ] Apply the plan after review: multi-file studio, scoped agents, build/preview/publish, and assistance tools.
-- [ ] Connect and verify external execution, search, and media services; requires configured VPS runner and service access.
+- [x] Multi-file studio, scoped agents, build/preview/publish, assistance tools.
+- [x] Online search connected (free, no key); external build runner no longer needed (HTML-only apps).
 ## Multi-provider agent swarm (Oct 30)
 - [x] Shared API key pool + settings modal, auto rotation/failover, built-in fallback
 - [x] Planner → parallel subagents → quality → test → build → publish
@@ -17,3 +17,6 @@
 - [x] Auto-switch model on failure/stall in every agent step
 - [x] Uploaded CSV keys set as default shared keys
 - [x] Live test settings key status + full mode on phone and desktop
+- [x] Settings: show Lovable AI usage/limit status
+- [x] Lovable AI first; on limit → auto switch; after all fail → one more full round; then tell user "no balance on any API"
+- [x] Files appear live in file manager while AI writes; preview opens after run
