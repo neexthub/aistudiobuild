@@ -16,3 +16,4 @@
 - [x] Auto-switch mid-stream
 - [x] Auto-switch model on failure/stall in every agent step
 - [x] Uploaded CSV keys set as default shared keys
+- [ ] Live test settings key status + full mode on phone and desktop; fix issues
