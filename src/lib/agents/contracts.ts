@@ -1,15 +1,17 @@
 import { z } from 'zod';
 import { validPath } from '@/lib/project/files';
-export const TEXT_MODELS = { coder: 'qwen2.5-coder:14b', planner: 'qwen2.5:14b' } as const;
+export const AGENT_ROLES = ['planner', 'coder', 'quality', 'test', 'build', 'publish'] as const;
+export const MAX_PARALLEL = 4;
 export const taskSchema = z.object({ id: z.string().min(1).max(60), role: z.string().min(1).max(60), objective: z.string().min(1).max(1500), dependsOn: z.array(z.string()).max(20), readPaths: z.array(z.string().refine(validPath)).max(150), writePaths: z.array(z.string().refine(validPath)).min(1).max(30), acceptanceChecks: z.array(z.string().max(300)).min(1).max(15) }).strict();
 export const planSchema = z.object({ summaryBn: z.string().min(1).max(2000), tasks: z.array(taskSchema).min(1).max(24) }).strict();
 export type AgentPlan = z.infer<typeof planSchema>;
 export type AgentTask = z.infer<typeof taskSchema>;
 const path = z.string().refine(validPath);
 export const operationSchema = z.discriminatedUnion('op', [z.object({ op: z.literal('create'), path, content: z.string() }).strict(), z.object({ op: z.literal('update'), path, expectedHash: z.string(), content: z.string() }).strict(), z.object({ op: z.literal('delete'), path, expectedHash: z.string() }).strict()]);
+export const reviewSchema = z.object({ summaryBn: z.string(), pass: z.boolean(), issues: z.array(z.string()).max(30), operations: z.array(operationSchema).max(30) });
 export const outputSchema = z.object({ summaryBn: z.string(), operations: z.array(operationSchema).min(1).max(30), checks: z.array(z.string()).max(20) }).strict();
 export type TaskState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-export type RunRecord = { id: string; createdAt: number; goal: string; state: 'planning' | 'running' | 'completed' | 'failed' | 'cancelled'; summary: string; tasks: Array<AgentTask & { state: TaskState }>; logs: string[] };
+export type RunRecord = { id: string; createdAt: number; goal: string; state: 'planning' | 'running' | 'reviewing' | 'completed' | 'failed' | 'cancelled'; summary: string; tasks: Array<AgentTask & { state: TaskState }>; logs: string[] };
 export function validatePlan(input: unknown): AgentPlan {
   const plan = planSchema.parse(input);
   const byId = new Map(plan.tasks.map(task => [task.id, task]));
@@ -25,16 +27,24 @@ export function validatePlan(input: unknown): AgentPlan {
   plan.tasks.forEach(task => visit(task.id));
   return plan;
 }
-export async function executePlan(plan: AgentPlan, signal: AbortSignal, execute: (task: AgentTask) => Promise<void>, status: (id: string, state: TaskState) => void) {
-  const pending = [...plan.tasks], done = new Set<string>();
-  while (pending.length) {
-    if (signal.aborted) { pending.forEach(task => status(task.id, 'cancelled')); throw new DOMException('Stopped', 'AbortError'); }
-    const i = pending.findIndex(task => task.dependsOn.every(id => done.has(id)));
-    const task = pending[i];
-    if (!task || i < 0) throw new Error('Task dependency resolve হয়নি।');
-    pending.splice(i, 1); status(task.id, 'running');
-    try { await execute(task); done.add(task.id); status(task.id, 'completed'); }
-    catch (error) { status(task.id, signal.aborted ? 'cancelled' : 'failed'); pending.forEach(t => status(t.id, 'cancelled')); throw error; }
+/** Runs every dependency-ready task in parallel (up to MAX_PARALLEL) as long as
+ * running tasks never write the same file. */
+export async function executePlan(plan: AgentPlan, signal: AbortSignal, execute: (task: AgentTask) => Promise<void>, status: (id: string, state: TaskState) => void, limit = MAX_PARALLEL) {
+  const pending = [...plan.tasks], done = new Set<string>(), running = new Map<string, Promise<void>>(), writing = new Set<string>();
+  let failure: unknown = null;
+  while (pending.length || running.size) {
+    if (signal.aborted && !failure) failure = new DOMException('Stopped', 'AbortError');
+    if (!failure) {
+      for (let i = 0; i < pending.length && running.size < limit;) {
+        const task = pending[i]!;
+        if (!task.dependsOn.every(id => done.has(id)) || task.writePaths.some(p => writing.has(p))) { i++; continue; }
+        pending.splice(i, 1); task.writePaths.forEach(p => writing.add(p)); status(task.id, 'running');
+        running.set(task.id, execute(task).then(() => { done.add(task.id); status(task.id, 'completed'); }, error => { status(task.id, signal.aborted ? 'cancelled' : 'failed'); failure ??= error; }).finally(() => { running.delete(task.id); task.writePaths.forEach(p => writing.delete(p)); }));
+      }
+    }
+    if (failure && !running.size) { pending.forEach(t => status(t.id, 'cancelled')); throw failure; }
+    if (!running.size) throw new Error('Task dependency resolve হয়নি।');
+    await Promise.race(running.values());
   }
 }
 export function jsonReply(text: string): unknown {
