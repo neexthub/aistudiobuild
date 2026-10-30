@@ -21,7 +21,7 @@ export async function candidates(role: AgentRole): Promise<Candidate[]> {
       // Lovable AI status lives in a marker row (provider 'lovable', no real key stored) so settings can show it.
       let row = (data ?? []).find(k => k.provider === 'lovable');
       if (!row) { const ins = await db.from('ai_keys').insert({ provider: 'lovable', api_key: 'builtin', label: 'Lovable AI (ডিফল্ট)' }).select('id, provider, api_key, cooldown_until, use_count').single(); row = ins.data ?? undefined; }
-      if (!row?.cooldown_until || new Date(row.cooldown_until).getTime() <= now) out.push({ label: `Lovable AI · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role], vision: true, keyId: row?.id, builtin: true });
+      if (!row?.cooldown_until || new Date(row.cooldown_until).getTime() <= now) out.push({ label: `Lovable AI · ${BUILTIN_MODELS[role]}`, url: 'https://ai.gateway.lovable.dev/v1/chat/completions', key: lk, model: BUILTIN_MODELS[role], vision: true, ...(row?.id ? { keyId: row.id } : {}), builtin: true });
     }
     for (const k of data ?? []) {
       if (k.cooldown_until && new Date(k.cooldown_until).getTime() > now) continue;
