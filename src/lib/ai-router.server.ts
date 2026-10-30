@@ -1,13 +1,13 @@
 // Server-only multi-provider router. Lovable AI is tried first (fast + high
 // quality); if it is busy or out of credit, keys from the shared free pool are
 // rotated with cooldowns, falling back across providers.
-import { PROVIDERS, LOVABLE_PROVIDER, BUILTIN_MODELS, type AgentRole } from './providers';
+import { PROVIDERS, LOVABLE_PROVIDER, BUILTIN_MODELS, BUILTIN_OPENAI_MODELS, type AgentRole } from './providers';
 
 export type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
 type Msg = { role: string; content: string | Part[] };
 type Candidate = { label: string; url: string; key: string; model: string; keyId?: string; vision: boolean; builtin?: boolean };
 // Models and the Lovable entry live in the client-safe registry so settings and the router always agree.
-export { BUILTIN_MODELS, LOVABLE_PROVIDER } from './providers';
+export { BUILTIN_MODELS, BUILTIN_OPENAI_MODELS, LOVABLE_PROVIDER } from './providers';
 
 async function admin() { return (await import('@/integrations/supabase/client.server')).supabaseAdmin; }
 
@@ -24,6 +24,9 @@ export async function candidates(role: AgentRole): Promise<Candidate[]> {
       let marker = lovable.find(k => k.api_key === 'builtin');
       if (!marker) { const ins = await db.from('ai_keys').insert({ provider: 'lovable', api_key: 'builtin', label: 'Lovable AI (ডিফল্ট)' }).select('id, provider, api_key, cooldown_until, use_count').single(); marker = ins.data ?? undefined; }
       if (!marker?.cooldown_until || new Date(marker.cooldown_until).getTime() <= now) out.push({ label: `${LOVABLE_PROVIDER.name} · ${BUILTIN_MODELS[role]}`, url: `${LOVABLE_PROVIDER.baseUrl}/chat/completions`, key: envKey, model: BUILTIN_MODELS[role], vision: true, ...(marker?.id ? { keyId: marker.id } : {}), builtin: true });
+      // OpenAI models on the same built-in key (no OpenAI account). No keyId on purpose: a bad
+      // answer here must never cool down the built-in key's marker row.
+      out.push({ label: `${LOVABLE_PROVIDER.name} · ${BUILTIN_OPENAI_MODELS[role]}`, url: `${LOVABLE_PROVIDER.baseUrl}/chat/completions`, key: envKey, model: BUILTIN_OPENAI_MODELS[role], vision: true, builtin: true });
     }
     // A key pasted in settings: same gateway, billed to that user's own workspace.
     for (const k of lovable) {

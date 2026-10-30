@@ -5,6 +5,8 @@ export type Provider = { id: string; name: string; baseUrl: string; keyUrl: stri
 
 /** Models the Lovable AI gateway is called with (no key needed — the project's own key). */
 export const BUILTIN_MODELS: Record<AgentRole, string> = { planner: 'google/gemini-3.8-flash', coder: 'google/gemini-3.8-flash', quality: 'google/gemini-3.8-flash', fast: 'google/gemini-3.1-flash-lite' };
+/** OpenAI models the same built-in Lovable key can call — no OpenAI account or card needed. */
+export const BUILTIN_OPENAI_MODELS: Record<AgentRole, string> = { planner: 'openai/gpt-5.5', coder: 'openai/gpt-5.5', quality: 'openai/gpt-5.4-mini', fast: 'openai/gpt-5.4-nano' };
 
 /**
  * Lovable AI: the project's own key already works with no setup. A user may also
