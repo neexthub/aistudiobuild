@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from 'zod';
 import { openStream, sseToNdjson } from '@/lib/ai-router.server';
 
-const requestSchema = z.object({ role: z.enum(['planner', 'coder', 'quality', 'fast']), format: z.literal('json').optional(), messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: z.string().max(60000) }).strict()).min(1).max(14) }).strict();
+const part = z.union([z.object({ type: z.literal('text'), text: z.string().max(60000) }).strict(), z.object({ type: z.literal('image_url'), image_url: z.object({ url: z.string().url().max(4000) }).strict() }).strict()]);
+const requestSchema = z.object({ role: z.enum(['planner', 'coder', 'quality', 'fast']), format: z.literal('json').optional(), messages: z.array(z.object({ role: z.enum(['system', 'user', 'assistant']), content: z.union([z.string().max(60000), z.array(part).max(8)]) }).strict()).min(1).max(20) }).strict();
 
 export const Route = createFileRoute("/api/ai/chat")({
   server: {
