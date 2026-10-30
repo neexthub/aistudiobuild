@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyOperations, contentHash, validPath, validateFiles } from '@/lib/project/files';
 import { createProject, editProjectFiles, getProject, migrateProject, restoreRevision, saveProjectFiles, updateProject } from '@/lib/store';
-import { executePlan, TEXT_MODELS, validatePlan } from '@/lib/agents/contracts';
+import { executePlan, AGENT_ROLES, validatePlan } from '@/lib/agents/contracts';
 import { nextTemplate } from '@/lib/project/template';
 import { sourceZip } from '@/lib/project/export';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -48,17 +48,17 @@ describe('file operations', () => {
   });
 });
 describe('agent orchestration', () => {
-  it('uses only the two user-selected models', () => { expect(TEXT_MODELS).toEqual({ coder: 'qwen2.5-coder:14b', planner: 'qwen2.5:14b' }); });
+  it('has planner, coder, quality, test, build and publish agents', () => { expect(AGENT_ROLES).toEqual(['planner', 'coder', 'quality', 'test', 'build', 'publish']); });
   it('rejects duplicate IDs, absent dependencies and cycles', () => {
     expect(() => validatePlan({ summaryBn: 'plan', tasks: [task('a'), task('a')] })).toThrow();
     expect(() => validatePlan({ summaryBn: 'plan', tasks: [task('a', ['missing'])] })).toThrow();
     expect(() => validatePlan({ summaryBn: 'plan', tasks: [task('a', ['b']), task('b', ['a'])] })).toThrow();
   });
-  it('runs dependency-ready tasks once with concurrency one', async () => {
+  it('runs independent tasks in parallel and dependents after', async () => {
     const plan = validatePlan({ summaryBn: 'plan', tasks: [task('b', ['a']), task('a'), task('c')] });
     let active = 0, maximum = 0; const order: string[] = [];
     await executePlan(plan, new AbortController().signal, async t => { active++; maximum = Math.max(active, maximum); await Promise.resolve(); order.push(t.id); active--; }, () => {});
-    expect(order).toEqual(['a', 'b', 'c']); expect(maximum).toBe(1);
+    expect(order.indexOf('a')).toBeLessThan(order.indexOf('b')); expect(order).toHaveLength(3); expect(maximum).toBe(2);
   });
   it('does not run dependents after failure or explicit stop', async () => {
     const plan = validatePlan({ summaryBn: 'plan', tasks: [task('a'), task('b', ['a'])] }); const order: string[] = [];
