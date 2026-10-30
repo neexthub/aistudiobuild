@@ -17,3 +17,6 @@
 - [x] Auto-switch model on failure/stall in every agent step
 - [x] Uploaded CSV keys set as default shared keys
 - [x] Live test settings key status + full mode on phone and desktop
+- [ ] Settings: show Lovable AI usage/limit status
+- [ ] Lovable AI first; on limit → auto switch; after all fail → one more full round; then tell user "no balance on any API"
+- [ ] Files appear live in file manager while AI writes; preview opens after run
