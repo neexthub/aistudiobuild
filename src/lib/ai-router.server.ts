@@ -94,6 +94,27 @@ export async function mark(keyId: string | undefined, ok: boolean, status = 0, h
   } catch (e) { console.error('key mark failed', e); }
 }
 
+// ---- Officer: live health board shared by every request in this server instance. ----
+type Health = { ok: number; fail: number; ms: number; downUntil: number };
+const board = new Map<string, Health>();
+const hkey = (c: { label: string; keyId?: string }) => `${c.label}|${c.keyId ?? ''}`;
+/** Records one attempt: successes lower the average latency, failures bench the model briefly. */
+export function officerRecord(id: string, ok: boolean, ms: number, now = Date.now()) {
+  const h = board.get(id) ?? { ok: 0, fail: 0, ms: 0, downUntil: 0 };
+  if (ok) { h.ms = h.ok ? Math.round(h.ms * 0.7 + ms * 0.3) : ms; h.ok++; h.downUntil = 0; }
+  else { h.fail++; h.downUntil = now + Math.min(600, 20 * 2 ** Math.min(h.fail, 5)) * 1000; }
+  board.set(id, h);
+}
+/** Officer ranking: benched models go last; among healthy ones, proven + faster first. Order is otherwise kept. */
+export function officerRank<T extends { label: string; keyId?: string }>(list: T[], now = Date.now()): T[] {
+  const score = (c: T) => { const h = board.get(hkey(c)); if (!h) return 0; if (h.downUntil > now) return 1e9; return h.ok ? -1 / (1 + h.ms / 1000) : 0; };
+  return list.map((c, i) => ({ c, i, s: score(c) })).sort((a, b) => a.s - b.s || a.i - b.i).map(x => x.c);
+}
+export function officerBoard() { return [...board.entries()].map(([k, h]) => ({ model: k.split('|')[0], ...h })); }
+export function officerReset() { board.clear(); }
+/** A model that has not even started answering by then is treated as stuck and handed over. */
+const FIRST_BYTE_MS = 20000;
+
 /** Opens a streaming completion on the first candidate that answers OK. */
 export async function openStream(role: AgentRole, messages: Msg[], json: boolean, signal: AbortSignal, attempt = 0): Promise<{ body: ReadableStream<Uint8Array>; label: string }> {
   const hasImages = messages.some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'image_url'));
@@ -103,20 +124,26 @@ export async function openStream(role: AgentRole, messages: Msg[], json: boolean
   if (round) await new Promise(r => setTimeout(r, 2500));
   const list = await candidates(role);
   if (!list.length) continue;
-  const ordered = orderCandidates(list);
+  const ordered = officerRank(orderCandidates(list));
   // A retry (attempt > 0) starts on a different model so a bad answer is not repeated.
   const k = attempt % Math.max(1, ordered.length);
   const tries = [...ordered.slice(k), ...ordered.slice(0, k)];
   for (const c of tries) {
+    const t0 = Date.now();
+    const stuck = new AbortController(); const timer = setTimeout(() => stuck.abort(), FIRST_BYTE_MS);
     try {
       const body = { model: c.model, messages: hasImages && !c.vision ? textOnly : messages, stream: true, ...(!c.builtin ? { temperature: 0.3 } : {}), ...(json ? { response_format: { type: 'json_object' } } : {}) };
-      const r = await fetch(c.url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.key}` }, body: JSON.stringify(body) });
-      if (r.ok && r.body) { void mark(c.keyId, true, r.status, r.headers, undefined, c.model); return { body: r.body, label: c.label }; }
+      const r = await fetch(c.url, { method: 'POST', signal: AbortSignal.any([signal, stuck.signal]), headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.key}` }, body: JSON.stringify(body) });
+      clearTimeout(timer);
+      if (r.ok && r.body) { officerRecord(hkey(c), true, Date.now() - t0); void mark(c.keyId, true, r.status, r.headers, undefined, c.model); return { body: r.body, label: c.label }; }
       const errText = await r.text().catch(() => '');
+      officerRecord(hkey(c), false, 0);
       errors.push(`${c.label}: ${r.status}`); codes.push(r.status); void mark(c.keyId, false, r.status, r.headers, `${r.status} ${errText.replace(/\s+/g, ' ').slice(0, 200)}`, c.model);
     } catch (e) {
+      clearTimeout(timer);
       if (signal.aborted) throw e;
-      errors.push(`${c.label}: সংযোগ ব্যর্থ`); void mark(c.keyId, false);
+      officerRecord(hkey(c), false, 0);
+      errors.push(`${c.label}: ${stuck.signal.aborted ? 'সাড়া দেয়নি' : 'সংযোগ ব্যর্থ'}`); void mark(c.keyId, false);
     }
   }
   }
